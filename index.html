@@ -45,6 +45,17 @@
      (body.ocultar-puntos, body.ocultar-nombres, etc). Si
      querés que alguno arranque apagado, agregá la clase
      correspondiente directo en el <body> más abajo.
+
+  6) MAPA ESTÁNDAR VS. GRIS
+     El botón "Gris" agrega la clase body.mapa-gris, que aplica
+     un filter: grayscale(1) en la capa de tiles. Para ajustar
+     qué tan gris queda, modificá ese filter en el <style>.
+
+  7) SLIDERS (opacidad de mapa, grosor de líneas, tamaño de
+     puntos) Están sobre variables JS sueltas (pointSize) y
+     llamadas directas a Leaflet (setOpacity, setStyle). Los
+     valores mínimo/máximo de cada uno están en los atributos
+     min/max de cada <input type="range"> más abajo.
   ============================================================
 -->
 
@@ -69,7 +80,8 @@
     overflow:hidden;
   }
   #map{ position:absolute; inset:0; background: var(--bg); }
-  .leaflet-tile-pane{ filter: grayscale(0.4) contrast(0.95); transition: opacity 0.5s ease; }
+  .leaflet-tile-pane{ transition: opacity 0.3s ease, filter 0.3s ease; }
+  body.mapa-gris .leaflet-tile-pane{ filter: grayscale(1) contrast(1.05); }
   .leaflet-control-attribution{
     background: rgba(240,239,234,0.7) !important;
     color: var(--ink-soft) !important;
@@ -148,6 +160,17 @@
   .switch.on::after{ transform: translateX(15px); }
   .toggles{ border-top: 1px solid var(--line); padding-top: 4px; }
 
+  .slider-row{ margin-bottom: 12px; }
+  .slider-row-label{
+    display:flex; justify-content:space-between;
+    font-size: 11.5px; margin-bottom: 4px; color: var(--ink);
+  }
+  .slider-row-label span:last-child{ color: var(--ink-soft); }
+  .slider-row input[type=range]{
+    width: 100%; accent-color: var(--ink);
+    height: 4px; cursor: pointer;
+  }
+
   /* Marcador: contenedor ancho para que el punto nunca se aplaste */
   .marker-wrap{
     display:flex; align-items:center;
@@ -155,8 +178,7 @@
     pointer-events: none;
   }
   .point-dot{
-    width: 11px; height: 11px;
-    flex: 0 0 11px;
+    flex-shrink: 0;
     background: #888;
     border: 1.5px solid var(--bg);
     box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
@@ -213,6 +235,26 @@
     <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
     <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
   </div>
+
+  <div class="section-title" style="margin-top:14px;">Mapa de fondo</div>
+  <div class="segmented">
+    <button id="btnMapaEstandar" class="active">Estándar</button>
+    <button id="btnMapaGris">Gris</button>
+  </div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Opacidad del mapa</span><span id="valOpacidad">80%</span></div>
+    <input type="range" id="sliderOpacidad" min="10" max="100" value="80">
+  </div>
+
+  <div class="section-title">Personalización</div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
+    <input type="range" id="sliderGrosor" min="0.5" max="4" step="0.1" value="1.2">
+  </div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
+    <input type="range" id="sliderTamano" min="6" max="20" value="11">
+  </div>
 </div>
 
 <div class="credit">TFI · Diseño y Comunicación Visual · UNLa</div>
@@ -261,7 +303,7 @@
     diamante: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
   };
 
-  function getDotStyle(u, colorMode) {
+  function getDotStyle(u, colorMode, tamano) {
     const color = colorMode === "individual"
       ? (coloresIndividuales[u.sigla] || "#888")
       : (coloresPorZona[u.zona] || "#888");
@@ -269,7 +311,7 @@
     const clip = FORMAS[forma];
     const borderRadius = forma === "circulo" ? "50%" : "0";
     const clipRule = clip ? `clip-path:${clip};` : "";
-    return `background:${color}; border-radius:${borderRadius}; ${clipRule}`;
+    return `background:${color}; border-radius:${borderRadius}; width:${tamano}px; height:${tamano}px; ${clipRule}`;
   }
 
   const map = L.map('map', {
@@ -279,30 +321,33 @@
     maxZoom: 13,
   }).setView([-34.66, -58.62], 10);
 
-  const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    subdomains: 'abcd',
+  const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    subdomains: 'abc',
     opacity: 0.8,
+    maxZoom: 19,
   }).addTo(map);
 
-  const edgesGroup = L.layerGroup(
-    edges.map(([i, j]) => L.polyline(
-      [[universidades[i].lat, universidades[i].lng], [universidades[j].lat, universidades[j].lng]],
-      { color: "#211F1B", opacity: 0.22, weight: 1.2 }
-    ))
-  ).addTo(map);
+  const edgeLines = edges.map(([i, j]) => L.polyline(
+    [[universidades[i].lat, universidades[i].lng], [universidades[j].lat, universidades[j].lng]],
+    { color: "#211F1B", opacity: 0.22, weight: 1.2 }
+  ));
+  const edgesGroup = L.layerGroup(edgeLines).addTo(map);
 
   const markersGroup = L.layerGroup().addTo(map);
   let colorMode = "zona";
+  let pointSize = 11;
 
   function renderMarkers() {
     markersGroup.clearLayers();
+    const wrapH = Math.max(18, pointSize + 4);
+    const anchorY = Math.round(wrapH / 2);
     universidades.forEach(u => {
       const icon = L.divIcon({
         className: '',
-        html: `<div class="marker-wrap"><div class="point-dot" style="${getDotStyle(u, colorMode)}"></div><span class="point-label">${u.sigla}</span></div>`,
-        iconSize: [100, 18],
-        iconAnchor: [5, 9],
+        html: `<div class="marker-wrap" style="height:${wrapH}px;"><div class="point-dot" style="${getDotStyle(u, colorMode, pointSize)}"></div><span class="point-label">${u.sigla}</span></div>`,
+        iconSize: [100, wrapH],
+        iconAnchor: [Math.round(pointSize / 2), anchorY],
       });
       L.marker([u.lat, u.lng], { icon })
         .addTo(markersGroup)
@@ -340,6 +385,38 @@
     this.classList.add('active');
     document.getElementById('btnColorZona').classList.remove('active');
     document.getElementById('legendZona').style.display = "none";
+    renderMarkers();
+  });
+
+  // Estilo de mapa: estándar vs gris
+  document.getElementById('btnMapaEstandar').addEventListener('click', function(){
+    this.classList.add('active');
+    document.getElementById('btnMapaGris').classList.remove('active');
+    document.body.classList.remove('mapa-gris');
+  });
+  document.getElementById('btnMapaGris').addEventListener('click', function(){
+    this.classList.add('active');
+    document.getElementById('btnMapaEstandar').classList.remove('active');
+    document.body.classList.add('mapa-gris');
+  });
+
+  // Opacidad del mapa base
+  document.getElementById('sliderOpacidad').addEventListener('input', function(){
+    baseLayer.setOpacity(this.value / 100);
+    document.getElementById('valOpacidad').textContent = this.value + '%';
+  });
+
+  // Grosor de las líneas de conexión
+  document.getElementById('sliderGrosor').addEventListener('input', function(){
+    const w = parseFloat(this.value);
+    edgeLines.forEach(l => l.setStyle({ weight: w }));
+    document.getElementById('valGrosor').textContent = w.toFixed(1);
+  });
+
+  // Tamaño de los puntos
+  document.getElementById('sliderTamano').addEventListener('input', function(){
+    pointSize = parseInt(this.value, 10);
+    document.getElementById('valTamano').textContent = pointSize + 'px';
     renderMarkers();
   });
 </script>
