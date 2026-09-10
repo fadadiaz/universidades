@@ -14,48 +14,58 @@
   GUÍA RÁPIDA DE PERSONALIZACIÓN
   ============================================================
 
-  1) COLORES
-     - Colores por zona: objeto "coloresPorZona" en el <script>.
-     - Colores individuales: objeto "coloresIndividuales" (una
-       entrada por sigla). Estos son los que vas a querer
-       ajustar vos; ahora tienen variedad de prueba.
+  1) COLORES DE PUNTOS
+     - Por zona: objeto "coloresPorZona".
+     - Individual: objeto "coloresIndividuales" (una entrada
+       por sigla) — son de prueba, ajustalos vos.
 
-  2) FORMAS DE LOS PUNTOS (para cambiar más adelante)
-     Buscá el objeto "FORMAS" en el <script>. Cada forma es un
-     valor de CSS clip-path. Ya viene con: circulo, cuadrado,
-     triangulo, diamante. Para usar otra forma en una
-     universidad puntual, agregale el campo "forma" a su objeto
-     en el array "universidades" (ej: forma:"triangulo"). Si no
-     se especifica, usa "circulo" por defecto. Para agregar una
-     forma nueva, sumá una entrada a FORMAS con su clip-path
-     (podés generar clip-paths en clippy.wtf/clip-path).
+  2) FORMA DE LOS PUNTOS
+     El selector del panel cambia "formaGlobal", usado por
+     todas las universidades salvo que un objeto individual en
+     "universidades" tenga su propio campo "forma" (eso pisa el
+     valor global solo para esa universidad puntual). Formas
+     disponibles en el objeto FORMAS: circulo, cuadrado, rombo,
+     hexagono, estrella (por polígono), trefoil, astroide,
+     cuatrifolio (estas tres últimas por curvas, recalculadas
+     según el tamaño del punto). Para sumar una forma nueva,
+     agregá una función a FORMAS que reciba el tamaño en px y
+     devuelva un valor de clip-path.
 
-  3) DATOS DE LAS UNIVERSIDADES
+  3) BORDE DE LOS PUNTOS
+     Switch "Borde blanco" agrega/saca un borde vía la
+     variable "conBorde".
+
+  4) DATOS DE LAS UNIVERSIDADES
      Array "universidades": name, sigla, lat, lng, zona (y
-     opcionalmente forma). Sumá o borrá objetos para
-     agregar/sacar universidades.
+     opcionalmente forma). Sumá o borrá objetos.
 
-  4) CONEXIONES
-     Array "edges": pares de índices (posición en el array de
-     universidades, empezando en 0) que quedan unidos por una
-     línea.
+  5) CONEXIONES
+     Array "edgesCurados": pares de índices para el modo
+     normal. El switch "Conectar todas" cambia a un mesh
+     completo (las 16 contra las 16) generado por la función
+     todosLosPares().
 
-  5) LOS BOTONES DE MOSTRAR/OCULTAR
-     Están todos armados con clases CSS sobre <body>
-     (body.ocultar-puntos, body.ocultar-nombres, etc). Si
-     querés que alguno arranque apagado, agregá la clase
-     correspondiente directo en el <body> más abajo.
+  6) LÍNEAS CURVAS
+     Switch "Líneas curvas". Cuando está activo, cada conexión
+     se dibuja como una curva cuadrática (función
+     puntosCurva()) en vez de una línea recta. El nivel de
+     curvatura se controla con la constante CURVATURA más abajo
+     en el <script>.
 
-  6) MAPA ESTÁNDAR VS. GRIS
-     El botón "Gris" agrega la clase body.mapa-gris, que aplica
-     un filter: grayscale(1) en la capa de tiles. Para ajustar
-     qué tan gris queda, modificá ese filter en el <style>.
+  7) NIVEL DE DETALLE DEL MAPA
+     "Mínimo" usa el basemap gris de Esri (World Light Gray
+     Base), que no trae nombres de calles ni ciudades — pensado
+     justo para no competir visualmente con tus propios datos.
+     "Estándar" usa OpenStreetMap con todos los nombres. Ambos
+     son gratis y no piden API key.
 
-  7) SLIDERS (opacidad de mapa, grosor de líneas, tamaño de
-     puntos) Están sobre variables JS sueltas (pointSize) y
-     llamadas directas a Leaflet (setOpacity, setStyle). Los
-     valores mínimo/máximo de cada uno están en los atributos
-     min/max de cada <input type="range"> más abajo.
+  8) MOSTRAR/OCULTAR EL PANEL ENTERO
+     Botón circular arriba a la derecha (id="panelToggleBtn").
+
+  9) SCROLL DEL PANEL
+     El panel tiene max-height + overflow-y:auto, así que si
+     seguís sumando controles, hace scroll interno solo en vez
+     de desbordar la pantalla.
   ============================================================
 -->
 
@@ -89,9 +99,19 @@
   }
   .leaflet-control-zoom{ display:none; }
 
-  /* Ocultar puntos / nombres / conexiones vía clases en <body> */
   body.ocultar-puntos .point-dot{ display:none; }
   body.ocultar-nombres .point-label{ display:none; }
+
+  /* Botón para ocultar/mostrar todo el panel */
+  #panelToggleBtn{
+    position:absolute; top:20px; right:20px; z-index:1001;
+    width:34px; height:34px; border-radius:50%;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:15px;
+    backdrop-filter: blur(6px);
+  }
 
   .panel{
     position:absolute; top:20px; left:20px; z-index:1000;
@@ -99,99 +119,77 @@
     border: 1px solid var(--line);
     border-radius: 4px;
     padding: 16px 18px;
-    width: 250px;
+    width: 260px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
     backdrop-filter: blur(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
   }
+  .panel.oculto{ opacity:0; pointer-events:none; transform: translateX(-12px); }
+  .panel::-webkit-scrollbar{ width:6px; }
+  .panel::-webkit-scrollbar-thumb{ background: var(--line); border-radius: 3px; }
+
   .panel h1{
-    font-size: 14.5px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    letter-spacing: -0.01em;
+    font-size: 14.5px; font-weight: 600; margin: 0 0 4px 0; letter-spacing: -0.01em;
   }
-  .panel p{
-    margin: 0 0 14px 0;
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--ink-soft);
-  }
+  .panel p{ margin: 0 0 14px 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
 
   .section-title{
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--ink-soft);
-    margin: 0 0 8px 0;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-soft); margin: 14px 0 8px 0;
   }
+  .section-title:first-of-type{ margin-top:0; }
 
-  .legend{ display:flex; flex-direction:column; gap:6px; margin-bottom: 14px; }
+  .legend{ display:flex; flex-direction:column; gap:6px; margin-bottom: 6px; }
   .legend-item{ display:flex; align-items:center; gap:8px; font-size:11.5px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
 
   .segmented{
     display:flex; border: 1px solid var(--line); border-radius: 4px;
-    overflow:hidden; margin-bottom: 14px;
+    overflow:hidden; margin-bottom: 8px;
   }
   .segmented button{
     flex:1; border:none; background: transparent; color: var(--ink);
-    font-family: var(--font); font-size: 11px; padding: 6px 0; cursor:pointer;
+    font-family: var(--font); font-size: 10.5px; padding: 6px 2px; cursor:pointer;
   }
   .segmented button.active{ background: var(--ink); color: var(--bg); }
 
-  .toggle-row{
-    display:flex; align-items:center; justify-content:space-between;
-    padding: 7px 0;
+  select, input[type=color]{
+    width:100%; font-family: var(--font); font-size: 11.5px;
+    padding: 5px 6px; border-radius: 4px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); margin-bottom: 8px;
   }
+  input[type=color]{ padding: 2px 4px; height: 28px; cursor:pointer; }
+
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding: 6px 0; }
   .toggle-label{ font-size: 12px; }
   .switch{
     position: relative; width: 34px; height: 19px;
-    background: rgba(33,31,27,0.18);
-    border-radius: 999px;
-    cursor: pointer;
-    transition: background 0.2s ease;
-    flex-shrink:0;
+    background: rgba(33,31,27,0.18); border-radius: 999px; cursor: pointer;
+    transition: background 0.2s ease; flex-shrink:0;
   }
   .switch.on{ background: var(--ink); }
   .switch::after{
-    content:''; position:absolute; top:2px; left:2px;
-    width:15px; height:15px; border-radius:50%;
-    background: var(--bg);
-    transition: transform 0.2s ease;
+    content:''; position:absolute; top:2px; left:2px; width:15px; height:15px;
+    border-radius:50%; background: var(--bg); transition: transform 0.2s ease;
   }
   .switch.on::after{ transform: translateX(15px); }
   .toggles{ border-top: 1px solid var(--line); padding-top: 4px; }
 
-  .slider-row{ margin-bottom: 12px; }
-  .slider-row-label{
-    display:flex; justify-content:space-between;
-    font-size: 11.5px; margin-bottom: 4px; color: var(--ink);
-  }
+  .slider-row{ margin-bottom: 10px; }
+  .slider-row-label{ display:flex; justify-content:space-between; font-size: 11.5px; margin-bottom: 4px; }
   .slider-row-label span:last-child{ color: var(--ink-soft); }
-  .slider-row input[type=range]{
-    width: 100%; accent-color: var(--ink);
-    height: 4px; cursor: pointer;
-  }
+  .slider-row input[type=range]{ width: 100%; accent-color: var(--ink); height: 4px; cursor: pointer; }
 
-  /* Marcador: contenedor ancho para que el punto nunca se aplaste */
-  .marker-wrap{
-    display:flex; align-items:center;
-    width: 100px; height: 18px;
-    pointer-events: none;
-  }
+  .marker-wrap{ display:flex; align-items:center; pointer-events: none; }
   .point-dot{
-    flex-shrink: 0;
-    background: #888;
-    border: 1.5px solid var(--bg);
+    flex-shrink: 0; background: #888;
     box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
-    pointer-events: auto;
-    cursor: pointer;
+    pointer-events: auto; cursor: pointer;
   }
   .point-label{
-    font-family: var(--font);
-    font-size: 10.5px;
-    font-weight: 500;
-    color: var(--ink);
-    white-space: nowrap;
-    margin-left: 6px;
+    font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; margin-left: 6px;
   }
 
   .leaflet-popup-content-wrapper{
@@ -203,65 +201,87 @@
   .leaflet-popup-content b{ font-weight:600; }
   .leaflet-popup-content .meta{ color: var(--ink-soft); font-size:11px; }
 
-  .credit{
-    position:absolute; bottom:14px; right:16px; z-index:1000;
-    font-size: 10px; color: var(--ink-soft);
-  }
+  .credit{ position:absolute; bottom:14px; right:16px; z-index:1000; font-size: 10px; color: var(--ink-soft); }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
+<div id="panelToggleBtn" title="Mostrar/ocultar panel">☰</div>
 
-<div class="panel">
+<div class="panel" id="panel">
   <h1>Universidades del conurbano</h1>
   <p>16 universidades nacionales del conurbano bonaerense.</p>
 
-  <div class="section-title">Color de los puntos</div>
+  <div class="section-title">Puntos</div>
   <div class="segmented">
     <button id="btnColorZona" class="active">Por zona</button>
     <button id="btnColorIndividual">Individual</button>
   </div>
-
   <div class="legend" id="legendZona">
     <div class="legend-item"><span class="legend-dot" style="background:var(--zona-norte)"></span>Zona Norte</div>
     <div class="legend-item"><span class="legend-dot" style="background:var(--zona-oeste)"></span>Zona Oeste</div>
     <div class="legend-item"><span class="legend-dot" style="background:var(--zona-sur)"></span>Zona Sur</div>
   </div>
 
-  <div class="toggles">
-    <div class="toggle-row"><span class="toggle-label">Mostrar mapa base</span><div class="switch on" id="toggleBase"></div></div>
-    <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
-    <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
-    <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
+  <select id="selectForma">
+    <option value="circulo">Círculo</option>
+    <option value="cuadrado">Cuadrado</option>
+    <option value="rombo">Rombo</option>
+    <option value="hexagono">Hexágono</option>
+    <option value="estrella">Estrella</option>
+    <option value="trefoil">Trefoil</option>
+    <option value="astroide">Astroide</option>
+    <option value="cuatrifolio">Cuatrifolio</option>
+  </select>
+
+  <div class="toggle-row"><span class="toggle-label">Borde blanco</span><div class="switch on" id="toggleBorde"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
+    <input type="range" id="sliderTamano" min="6" max="20" value="11">
   </div>
 
-  <div class="section-title" style="margin-top:14px;">Mapa de fondo</div>
+  <div class="section-title">Conexiones</div>
+  <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Conectar todas entre sí</span><div class="switch" id="toggleMesh"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Líneas curvas</span><div class="switch" id="toggleCurva"></div></div>
+  <select id="selectEstiloLinea">
+    <option value="solida">Línea sólida</option>
+    <option value="punteada">Punteada</option>
+    <option value="discontinua">Discontinua</option>
+  </select>
+  <input type="color" id="colorLinea" value="#211F1B">
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Opacidad de líneas</span><span id="valOpacidadLinea">22%</span></div>
+    <input type="range" id="sliderOpacidadLinea" min="5" max="100" value="22">
+  </div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
+    <input type="range" id="sliderGrosor" min="0.5" max="4" step="0.1" value="1.2">
+  </div>
+
+  <div class="section-title">Mapa de fondo</div>
+  <div class="toggle-row"><span class="toggle-label">Mostrar mapa base</span><div class="switch on" id="toggleBase"></div></div>
   <div class="segmented">
-    <button id="btnMapaEstandar" class="active">Estándar</button>
+    <button id="btnDetalleMinimo" class="active">Mínimo</button>
+    <button id="btnDetalleEstandar">Estándar</button>
+  </div>
+  <div class="segmented">
+    <button id="btnMapaEstandar" class="active">Color</button>
     <button id="btnMapaGris">Gris</button>
   </div>
   <div class="slider-row">
     <div class="slider-row-label"><span>Opacidad del mapa</span><span id="valOpacidad">80%</span></div>
     <input type="range" id="sliderOpacidad" min="10" max="100" value="80">
   </div>
-
-  <div class="section-title">Personalización</div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
-    <input type="range" id="sliderGrosor" min="0.5" max="4" step="0.1" value="1.2">
-  </div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
-    <input type="range" id="sliderTamano" min="6" max="20" value="11">
-  </div>
 </div>
 
 <div class="credit">TFI · Diseño y Comunicación Visual · UNLa</div>
 
 <script>
-  // ---- DATOS: sumá/sacá universidades acá ----
-  // Campo opcional "forma": "circulo" (default), "cuadrado", "triangulo", "diamante"
+  // ---- DATOS ----
   const universidades = [
     {name:"Universidad Nacional de Lanús", sigla:"UNLa", lat:-34.7355252, lng:-58.3910807, zona:"sur"},
     {name:"Universidad Nacional de Quilmes", sigla:"UNQ", lat:-34.7065325, lng:-58.2783994, zona:"sur"},
@@ -281,13 +301,10 @@
     {name:"Universidad Nacional Raúl Scalabrini Ortiz", sigla:"UNSO", lat:-34.465463, lng:-58.5095559, zona:"norte"},
   ];
 
-  // Conexiones (pares de índices del array de arriba)
-  const edges = [[6,12],[6,15],[4,6],[4,12],[12,13],[5,10],[0,8],[0,14],[2,11],[1,9],[10,11],[1,8],[6,7],[7,15],[4,7],[3,14],[5,11],[0,3],[0,9],[10,13],[2,12]];
+  const edgesCurados = [[6,12],[6,15],[4,6],[4,12],[12,13],[5,10],[0,8],[0,14],[2,11],[1,9],[10,11],[1,8],[6,7],[7,15],[4,7],[3,14],[5,11],[0,3],[0,9],[10,13],[2,12]];
+  function todosLosPares(n){ const r=[]; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) r.push([i,j]); return r; }
 
-  // Colores por zona
   const coloresPorZona = { norte: "#2E7D6B", oeste: "#C97A2B", sur: "#5B4B8A" };
-
-  // Colores individuales por sigla — variedad de arranque, pensada para que la ajustes vos
   const coloresIndividuales = {
     UNLa: "#2E7D6B", UNQ: "#C97A2B", UNGS: "#5B4B8A", UNLZ: "#B4436C",
     UNLaM: "#3B6E8F", UNLu: "#8C9C3F", UNTREF: "#A65B3F", UNSAM: "#4E6E58",
@@ -295,75 +312,157 @@
     UNAHUR: "#5E8B7E", UNO: "#8A6E3F", UNAB: "#6B4E71", UNSO: "#3F7C6E",
   };
 
-  // Formas disponibles (clip-path). "circulo" no necesita clip-path (usa border-radius).
+  // ---- FORMAS (clip-path). Las polygon() usan % y escalan solas.
+  // Las curvas (trefoil/astroide/cuatrifolio) se recalculan según el tamaño (size, en px). ----
+  function circleUnionPath(centers, r){
+    return centers.map(([cx,cy]) => `M ${cx+r} ${cy} A ${r} ${r} 0 1 0 ${cx-r} ${cy} A ${r} ${r} 0 1 0 ${cx+r} ${cy} Z`).join(' ');
+  }
   const FORMAS = {
-    circulo: null,
-    cuadrado: null, // sin clip-path, solo border-radius:0 (ver getDotStyle)
-    triangulo: "polygon(50% 0%, 0% 100%, 100% 100%)",
-    diamante: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
+    circulo: () => "circle(50%)",
+    cuadrado: () => "inset(0)",
+    rombo: () => "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
+    hexagono: () => "polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)",
+    estrella: () => "polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)",
+    trefoil: (size) => {
+      const c = size/2, r = size*0.32, d = size*0.25;
+      const centers = [[c, c-d],[c-d*0.87, c+d*0.5],[c+d*0.87, c+d*0.5]];
+      return `path('${circleUnionPath(centers, r)}')`;
+    },
+    astroide: (size) => {
+      const c = size/2;
+      return `path('M ${c} 0 Q ${c} ${c} ${size} ${c} Q ${c} ${c} ${c} ${size} Q ${c} ${c} 0 ${c} Q ${c} ${c} ${c} 0 Z')`;
+    },
+    cuatrifolio: (size) => {
+      const c = size/2, r = size*0.32, d = size*0.25;
+      const centers = [[c,c-d],[c+d,c],[c,c+d],[c-d,c]];
+      return `path('${circleUnionPath(centers, r)}')`;
+    },
   };
+  let formaGlobal = "circulo";
+  let conBorde = true;
 
   function getDotStyle(u, colorMode, tamano) {
     const color = colorMode === "individual"
       ? (coloresIndividuales[u.sigla] || "#888")
       : (coloresPorZona[u.zona] || "#888");
-    const forma = u.forma || "circulo";
-    const clip = FORMAS[forma];
-    const borderRadius = forma === "circulo" ? "50%" : "0";
-    const clipRule = clip ? `clip-path:${clip};` : "";
-    return `background:${color}; border-radius:${borderRadius}; width:${tamano}px; height:${tamano}px; ${clipRule}`;
+    const forma = u.forma || formaGlobal;
+    const clip = (FORMAS[forma] || FORMAS.circulo)(tamano);
+    const border = conBorde ? "1.5px solid " + getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() : "none";
+    return `background:${color}; width:${tamano}px; height:${tamano}px; clip-path:${clip}; -webkit-clip-path:${clip}; border:${border};`;
+  }
+
+  // ---- Líneas curvas: puntos intermedios en arco cuadrático ----
+  const CURVATURA = 0.18;
+  function puntosCurva(p1, p2, curvo){
+    if (!curvo) return [p1, p2];
+    const [lat1,lng1] = p1, [lat2,lng2] = p2;
+    const mx = (lat1+lat2)/2, my = (lng1+lng2)/2;
+    const dx = lng2-lng1, dy = lat2-lat1;
+    const cx = mx - dy*CURVATURA, cy = my + dx*CURVATURA;
+    const pts = [];
+    const STEPS = 24;
+    for (let i=0;i<=STEPS;i++){
+      const t = i/STEPS;
+      const lat = (1-t)*(1-t)*lat1 + 2*(1-t)*t*cx + t*t*lat2;
+      const lng = (1-t)*(1-t)*lng1 + 2*(1-t)*t*cy + t*t*lng2;
+      pts.push([lat,lng]);
+    }
+    return pts;
   }
 
   const map = L.map('map', {
-    zoomControl: false,
-    attributionControl: true,
-    minZoom: 8,
-    maxZoom: 13,
+    zoomControl: false, attributionControl: true, minZoom: 8, maxZoom: 13,
   }).setView([-34.66, -58.62], 10);
 
-  const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Basemap sin texto (default): Esri World Light Gray Base — sin API key.
+  const tileMinimo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+    opacity: 0.8, maxZoom: 16,
+  });
+  // Basemap estándar con nombres: OpenStreetMap.
+  const tileEstandar = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    subdomains: 'abc',
-    opacity: 0.8,
-    maxZoom: 19,
-  }).addTo(map);
+    subdomains: 'abc', opacity: 0.8, maxZoom: 19,
+  });
+  let baseLayer = tileMinimo.addTo(map);
 
-  const edgeLines = edges.map(([i, j]) => L.polyline(
-    [[universidades[i].lat, universidades[i].lng], [universidades[j].lat, universidades[j].lng]],
-    { color: "#211F1B", opacity: 0.22, weight: 1.2 }
-  ));
-  const edgesGroup = L.layerGroup(edgeLines).addTo(map);
-
+  const edgesGroup = L.layerGroup().addTo(map);
   const markersGroup = L.layerGroup().addTo(map);
-  let colorMode = "zona";
-  let pointSize = 11;
+
+  let estado = {
+    colorMode: "zona",
+    pointSize: 11,
+    mesh: false,
+    curva: false,
+    lineColor: "#211F1B",
+    lineOpacity: 0.22,
+    lineWeight: 1.2,
+    lineDash: null,
+  };
+
+  function renderEdges(){
+    edgesGroup.clearLayers();
+    const pares = estado.mesh ? todosLosPares(universidades.length) : edgesCurados;
+    pares.forEach(([i,j]) => {
+      const p1 = [universidades[i].lat, universidades[i].lng];
+      const p2 = [universidades[j].lat, universidades[j].lng];
+      const latlngs = puntosCurva(p1, p2, estado.curva);
+      L.polyline(latlngs, {
+        color: estado.lineColor, opacity: estado.lineOpacity,
+        weight: estado.lineWeight, dashArray: estado.lineDash,
+        smoothFactor: 1,
+      }).addTo(edgesGroup);
+    });
+  }
 
   function renderMarkers() {
     markersGroup.clearLayers();
-    const wrapH = Math.max(18, pointSize + 4);
+    const wrapH = Math.max(18, estado.pointSize + 4);
     const anchorY = Math.round(wrapH / 2);
     universidades.forEach(u => {
       const icon = L.divIcon({
         className: '',
-        html: `<div class="marker-wrap" style="height:${wrapH}px;"><div class="point-dot" style="${getDotStyle(u, colorMode, pointSize)}"></div><span class="point-label">${u.sigla}</span></div>`,
+        html: `<div class="marker-wrap" style="height:${wrapH}px;"><div class="point-dot" style="${getDotStyle(u, estado.colorMode, estado.pointSize)}"></div><span class="point-label">${u.sigla}</span></div>`,
         iconSize: [100, wrapH],
-        iconAnchor: [Math.round(pointSize / 2), anchorY],
+        iconAnchor: [Math.round(estado.pointSize / 2), anchorY],
       });
       L.marker([u.lat, u.lng], { icon })
         .addTo(markersGroup)
         .bindPopup(`<b>${u.sigla}</b><br>${u.name}<div class="meta">Zona ${u.zona} · ${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</div>`);
     });
   }
+  renderEdges();
   renderMarkers();
 
-  // ---- Controles ----
-  document.getElementById('toggleBase').addEventListener('click', function(){
-    const on = this.classList.toggle('on');
-    if (on) baseLayer.addTo(map); else map.removeLayer(baseLayer);
+  // ---- Controles: panel on/off ----
+  document.getElementById('panelToggleBtn').addEventListener('click', function(){
+    document.getElementById('panel').classList.toggle('oculto');
   });
-  document.getElementById('toggleEdges').addEventListener('click', function(){
-    const on = this.classList.toggle('on');
-    if (on) edgesGroup.addTo(map); else map.removeLayer(edgesGroup);
+
+  // ---- Color de puntos ----
+  document.getElementById('btnColorZona').addEventListener('click', function(){
+    estado.colorMode = "zona";
+    this.classList.add('active');
+    document.getElementById('btnColorIndividual').classList.remove('active');
+    document.getElementById('legendZona').style.display = "flex";
+    renderMarkers();
+  });
+  document.getElementById('btnColorIndividual').addEventListener('click', function(){
+    estado.colorMode = "individual";
+    this.classList.add('active');
+    document.getElementById('btnColorZona').classList.remove('active');
+    document.getElementById('legendZona').style.display = "none";
+    renderMarkers();
+  });
+
+  // ---- Forma / borde / tamaño ----
+  document.getElementById('selectForma').addEventListener('change', function(){
+    formaGlobal = this.value;
+    renderMarkers();
+  });
+  document.getElementById('toggleBorde').addEventListener('click', function(){
+    conBorde = this.classList.toggle('on');
+    renderMarkers();
   });
   document.getElementById('togglePoints').addEventListener('click', function(){
     const on = this.classList.toggle('on');
@@ -373,22 +472,66 @@
     const on = this.classList.toggle('on');
     document.body.classList.toggle('ocultar-nombres', !on);
   });
-  document.getElementById('btnColorZona').addEventListener('click', function(){
-    colorMode = "zona";
-    this.classList.add('active');
-    document.getElementById('btnColorIndividual').classList.remove('active');
-    document.getElementById('legendZona').style.display = "flex";
-    renderMarkers();
-  });
-  document.getElementById('btnColorIndividual').addEventListener('click', function(){
-    colorMode = "individual";
-    this.classList.add('active');
-    document.getElementById('btnColorZona').classList.remove('active');
-    document.getElementById('legendZona').style.display = "none";
+  document.getElementById('sliderTamano').addEventListener('input', function(){
+    estado.pointSize = parseInt(this.value, 10);
+    document.getElementById('valTamano').textContent = estado.pointSize + 'px';
     renderMarkers();
   });
 
-  // Estilo de mapa: estándar vs gris
+  // ---- Conexiones ----
+  document.getElementById('toggleEdges').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    if (on) edgesGroup.addTo(map); else map.removeLayer(edgesGroup);
+  });
+  document.getElementById('toggleMesh').addEventListener('click', function(){
+    estado.mesh = this.classList.toggle('on');
+    renderEdges();
+  });
+  document.getElementById('toggleCurva').addEventListener('click', function(){
+    estado.curva = this.classList.toggle('on');
+    renderEdges();
+  });
+  document.getElementById('selectEstiloLinea').addEventListener('change', function(){
+    estado.lineDash = this.value === 'punteada' ? '2,6' : this.value === 'discontinua' ? '9,7' : null;
+    renderEdges();
+  });
+  document.getElementById('colorLinea').addEventListener('input', function(){
+    estado.lineColor = this.value;
+    renderEdges();
+  });
+  document.getElementById('sliderOpacidadLinea').addEventListener('input', function(){
+    estado.lineOpacity = this.value / 100;
+    document.getElementById('valOpacidadLinea').textContent = this.value + '%';
+    renderEdges();
+  });
+  document.getElementById('sliderGrosor').addEventListener('input', function(){
+    estado.lineWeight = parseFloat(this.value);
+    document.getElementById('valGrosor').textContent = estado.lineWeight.toFixed(1);
+    renderEdges();
+  });
+
+  // ---- Mapa de fondo ----
+  document.getElementById('toggleBase').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    if (on) baseLayer.addTo(map); else map.removeLayer(baseLayer);
+  });
+  function cambiarBasemap(nuevo){
+    const onMapa = map.hasLayer(baseLayer);
+    map.removeLayer(baseLayer);
+    baseLayer = nuevo;
+    baseLayer.setOpacity(document.getElementById('sliderOpacidad').value / 100);
+    if (onMapa) baseLayer.addTo(map);
+  }
+  document.getElementById('btnDetalleMinimo').addEventListener('click', function(){
+    this.classList.add('active');
+    document.getElementById('btnDetalleEstandar').classList.remove('active');
+    cambiarBasemap(tileMinimo);
+  });
+  document.getElementById('btnDetalleEstandar').addEventListener('click', function(){
+    this.classList.add('active');
+    document.getElementById('btnDetalleMinimo').classList.remove('active');
+    cambiarBasemap(tileEstandar);
+  });
   document.getElementById('btnMapaEstandar').addEventListener('click', function(){
     this.classList.add('active');
     document.getElementById('btnMapaGris').classList.remove('active');
@@ -399,25 +542,9 @@
     document.getElementById('btnMapaEstandar').classList.remove('active');
     document.body.classList.add('mapa-gris');
   });
-
-  // Opacidad del mapa base
   document.getElementById('sliderOpacidad').addEventListener('input', function(){
     baseLayer.setOpacity(this.value / 100);
     document.getElementById('valOpacidad').textContent = this.value + '%';
-  });
-
-  // Grosor de las líneas de conexión
-  document.getElementById('sliderGrosor').addEventListener('input', function(){
-    const w = parseFloat(this.value);
-    edgeLines.forEach(l => l.setStyle({ weight: w }));
-    document.getElementById('valGrosor').textContent = w.toFixed(1);
-  });
-
-  // Tamaño de los puntos
-  document.getElementById('sliderTamano').addEventListener('input', function(){
-    pointSize = parseInt(this.value, 10);
-    document.getElementById('valTamano').textContent = pointSize + 'px';
-    renderMarkers();
   });
 </script>
 
