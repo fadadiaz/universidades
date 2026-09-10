@@ -14,58 +14,51 @@
   GUÍA RÁPIDA DE PERSONALIZACIÓN
   ============================================================
 
-  1) COLORES DE PUNTOS
-     - Por zona: objeto "coloresPorZona".
-     - Individual: objeto "coloresIndividuales" (una entrada
-       por sigla) — son de prueba, ajustalos vos.
+  1) ASIGNACIÓN DE FORMAS "VARIADAS"
+     Array "asignacionFormas": una forma por universidad, en el
+     mismo orden que el array "universidades". El switch
+     "Formas variadas" alterna entre usar este array o forzar
+     círculo para todas. Formas válidas: circulo, cuadrado,
+     rombo, hexagono, estrella, trefoil, astroide, cuatrifolio.
 
-  2) FORMA DE LOS PUNTOS
-     El selector del panel cambia "formaGlobal", usado por
-     todas las universidades salvo que un objeto individual en
-     "universidades" tenga su propio campo "forma" (eso pisa el
-     valor global solo para esa universidad puntual). Formas
-     disponibles en el objeto FORMAS: circulo, cuadrado, rombo,
-     hexagono, estrella (por polígono), trefoil, astroide,
-     cuatrifolio (estas tres últimas por curvas, recalculadas
-     según el tamaño del punto). Para sumar una forma nueva,
-     agregá una función a FORMAS que reciba el tamaño en px y
-     devuelva un valor de clip-path.
+  2) OVERRIDES INDIVIDUALES (sección "Personalizar cada
+     universidad" del panel, plegada por default)
+     Todo lo que toques ahí (forma, color, imagen subida) se
+     guarda en formaOverride / colorOverride / imagenOverride y
+     tiene prioridad sobre TODO lo demás (color por zona,
+     formas variadas, etc). Esto vive solo en el navegador
+     mientras tengas la página abierta: si querés que un ajuste
+     quede fijo en el archivo para siempre, copiá el valor
+     resultante a mano en "asignacionFormas" o
+     "coloresIndividuales" más abajo en este script.
+     Las imágenes subidas (SVG o PNG) tampoco quedan guardadas
+     en el archivo — es una vista previa de tu sesión actual.
 
   3) BORDE DE LOS PUNTOS
-     Switch "Borde blanco" agrega/saca un borde vía la
-     variable "conBorde".
+     "colorBorde" define el color; el switch lo prende/apaga.
+     Técnicamente se dibuja como dos capas de la misma forma
+     (una de fondo con el color del borde, y adentro la forma
+     real más chica) para que el contorno seco siga cualquier
+     silueta, no solo círculos.
 
-  4) DATOS DE LAS UNIVERSIDADES
-     Array "universidades": name, sigla, lat, lng, zona (y
-     opcionalmente forma). Sumá o borrá objetos.
+  4) TAMAÑOS
+     "sliderTamano" ahora llega hasta 80px y "sliderGrosor"
+     (grosor de líneas) hasta 15px, pensado para uso artístico,
+     no solo funcional.
 
-  5) CONEXIONES
-     Array "edgesCurados": pares de índices para el modo
-     normal. El switch "Conectar todas" cambia a un mesh
-     completo (las 16 contra las 16) generado por la función
-     todosLosPares().
+  5) MAPAS DE FONDO
+     "selectBasemap" tiene 5 estilos, todos gratis y sin API
+     key: gris claro, gris oscuro, satelital y terreno (los 4
+     de Esri, sin nombres de calles/localidades) y OpenStreetMap
+     estándar (con todos los nombres). El switch "Blanco y
+     negro" es un filtro CSS aparte que se puede combinar con
+     cualquiera de los 5.
 
-  6) LÍNEAS CURVAS
-     Switch "Líneas curvas". Cuando está activo, cada conexión
-     se dibuja como una curva cuadrática (función
-     puntosCurva()) en vez de una línea recta. El nivel de
-     curvatura se controla con la constante CURVATURA más abajo
-     en el <script>.
-
-  7) NIVEL DE DETALLE DEL MAPA
-     "Mínimo" usa el basemap gris de Esri (World Light Gray
-     Base), que no trae nombres de calles ni ciudades — pensado
-     justo para no competir visualmente con tus propios datos.
-     "Estándar" usa OpenStreetMap con todos los nombres. Ambos
-     son gratis y no piden API key.
-
-  8) MOSTRAR/OCULTAR EL PANEL ENTERO
-     Botón circular arriba a la derecha (id="panelToggleBtn").
-
-  9) SCROLL DEL PANEL
-     El panel tiene max-height + overflow-y:auto, así que si
-     seguís sumando controles, hace scroll interno solo en vez
-     de desbordar la pantalla.
+  6) CONEXIONES DESACTIVADAS
+     Si apagás "Mostrar conexiones", el resto de los controles
+     de esa sección se ven atenuados y no responden — es solo
+     una clase CSS (.disabled-block) en el contenedor
+     "#conexionesExtra".
   ============================================================
 -->
 
@@ -84,55 +77,38 @@
   *{ box-sizing: border-box; }
   html, body{
     margin:0; padding:0; height:100%; width:100%;
-    background: var(--bg);
-    font-family: var(--font);
-    color: var(--ink);
-    overflow:hidden;
+    background: var(--bg); font-family: var(--font); color: var(--ink); overflow:hidden;
   }
   #map{ position:absolute; inset:0; background: var(--bg); }
   .leaflet-tile-pane{ transition: opacity 0.3s ease, filter 0.3s ease; }
   body.mapa-gris .leaflet-tile-pane{ filter: grayscale(1) contrast(1.05); }
-  .leaflet-control-attribution{
-    background: rgba(240,239,234,0.7) !important;
-    color: var(--ink-soft) !important;
-    font-size: 10px !important;
-  }
+  .leaflet-control-attribution{ background: rgba(240,239,234,0.7) !important; color: var(--ink-soft) !important; font-size: 10px !important; }
   .leaflet-control-zoom{ display:none; }
 
-  body.ocultar-puntos .point-dot{ display:none; }
+  body.ocultar-puntos .point-marker{ display:none; }
   body.ocultar-nombres .point-label{ display:none; }
 
-  /* Botón para ocultar/mostrar todo el panel */
   #panelToggleBtn{
     position:absolute; top:20px; right:20px; z-index:1001;
     width:34px; height:34px; border-radius:50%;
-    background: var(--panel-bg);
-    border: 1px solid var(--line);
+    background: var(--panel-bg); border: 1px solid var(--line);
     display:flex; align-items:center; justify-content:center;
-    cursor:pointer; font-size:15px;
-    backdrop-filter: blur(6px);
+    cursor:pointer; font-size:15px; backdrop-filter: blur(6px);
   }
 
   .panel{
     position:absolute; top:20px; left:20px; z-index:1000;
-    background: var(--panel-bg);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 16px 18px;
-    width: 260px;
-    max-height: calc(100vh - 40px);
-    overflow-y: auto;
-    backdrop-filter: blur(6px);
+    background: var(--panel-bg); border: 1px solid var(--line); border-radius: 4px;
+    padding: 16px 18px; width: 270px; max-height: calc(100vh - 40px);
+    overflow-y: auto; backdrop-filter: blur(6px);
     transition: opacity 0.2s ease, transform 0.2s ease;
   }
   .panel.oculto{ opacity:0; pointer-events:none; transform: translateX(-12px); }
   .panel::-webkit-scrollbar{ width:6px; }
   .panel::-webkit-scrollbar-thumb{ background: var(--line); border-radius: 3px; }
 
-  .panel h1{
-    font-size: 14.5px; font-weight: 600; margin: 0 0 4px 0; letter-spacing: -0.01em;
-  }
-  .panel p{ margin: 0 0 14px 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
+  .panel h1{ font-size: 14.5px; font-weight: 600; margin: 0 0 4px 0; letter-spacing: -0.01em; }
+  .panel p{ margin: 0 0 12px 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
 
   .section-title{
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
@@ -144,14 +120,8 @@
   .legend-item{ display:flex; align-items:center; gap:8px; font-size:11.5px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
 
-  .segmented{
-    display:flex; border: 1px solid var(--line); border-radius: 4px;
-    overflow:hidden; margin-bottom: 8px;
-  }
-  .segmented button{
-    flex:1; border:none; background: transparent; color: var(--ink);
-    font-family: var(--font); font-size: 10.5px; padding: 6px 2px; cursor:pointer;
-  }
+  .segmented{ display:flex; border: 1px solid var(--line); border-radius: 4px; overflow:hidden; margin-bottom: 8px; }
+  .segmented button{ flex:1; border:none; background: transparent; color: var(--ink); font-family: var(--font); font-size: 10.5px; padding: 6px 2px; cursor:pointer; }
   .segmented button.active{ background: var(--ink); color: var(--bg); }
 
   select, input[type=color]{
@@ -160,13 +130,13 @@
     background: var(--bg); color: var(--ink); margin-bottom: 8px;
   }
   input[type=color]{ padding: 2px 4px; height: 28px; cursor:pointer; }
+  input[type=file]{ width:100%; font-size: 10px; margin-bottom:8px; }
 
   .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding: 6px 0; }
   .toggle-label{ font-size: 12px; }
   .switch{
-    position: relative; width: 34px; height: 19px;
-    background: rgba(33,31,27,0.18); border-radius: 999px; cursor: pointer;
-    transition: background 0.2s ease; flex-shrink:0;
+    position: relative; width: 34px; height: 19px; background: rgba(33,31,27,0.18);
+    border-radius: 999px; cursor: pointer; transition: background 0.2s ease; flex-shrink:0;
   }
   .switch.on{ background: var(--ink); }
   .switch::after{
@@ -181,21 +151,26 @@
   .slider-row-label span:last-child{ color: var(--ink-soft); }
   .slider-row input[type=range]{ width: 100%; accent-color: var(--ink); height: 4px; cursor: pointer; }
 
-  .marker-wrap{ display:flex; align-items:center; pointer-events: none; }
-  .point-dot{
-    flex-shrink: 0; background: #888;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
-    pointer-events: auto; cursor: pointer;
-  }
-  .point-label{
-    font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--ink);
-    white-space: nowrap; margin-left: 6px;
+  #conexionesExtra.disabled-block{ opacity: 0.35; pointer-events: none; }
+
+  details{ margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+  summary{ cursor:pointer; font-size: 11.5px; font-weight: 500; }
+  .fila-uni{ display:grid; grid-template-columns: 44px 1fr 34px; gap:6px; align-items:center; margin-bottom:6px; }
+  .fila-uni span{ font-size: 10.5px; color: var(--ink-soft); }
+  .fila-uni select{ margin-bottom:0; font-size:10px; padding:3px 4px; }
+  .fila-uni input[type=color]{ margin-bottom:0; height:22px; padding:1px 2px; }
+  .fila-uni-file{ grid-column: 1 / -1; display:flex; gap:6px; align-items:center; margin-bottom:8px; }
+  .fila-uni-file input[type=file]{ margin-bottom:0; }
+  .btn-mini{
+    font-size:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink);
+    border-radius:3px; padding:2px 6px; cursor:pointer; flex-shrink:0;
   }
 
-  .leaflet-popup-content-wrapper{
-    background: var(--bg); color: var(--ink); border-radius: 3px;
-    border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  }
+  .marker-wrap{ display:flex; align-items:center; pointer-events: none; }
+  .point-marker{ flex-shrink:0; position:relative; cursor:pointer; pointer-events:auto; }
+  .point-label{ font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--ink); white-space: nowrap; margin-left: 6px; }
+
+  .leaflet-popup-content-wrapper{ background: var(--bg); color: var(--ink); border-radius: 3px; border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
   .leaflet-popup-tip{ background: var(--bg); }
   .leaflet-popup-content{ font-family: var(--font); font-size: 12.5px; margin: 9px 11px; }
   .leaflet-popup-content b{ font-weight:600; }
@@ -213,7 +188,7 @@
   <h1>Universidades del conurbano</h1>
   <p>16 universidades nacionales del conurbano bonaerense.</p>
 
-  <div class="section-title">Puntos</div>
+  <div class="section-title">Color de puntos</div>
   <div class="segmented">
     <button id="btnColorZona" class="active">Por zona</button>
     <button id="btnColorIndividual">Individual</button>
@@ -223,59 +198,65 @@
     <div class="legend-item"><span class="legend-dot" style="background:var(--zona-oeste)"></span>Zona Oeste</div>
     <div class="legend-item"><span class="legend-dot" style="background:var(--zona-sur)"></span>Zona Sur</div>
   </div>
+  <div class="toggle-row" id="filaAleatorio" style="display:none;">
+    <span class="toggle-label">Colores aleatorios</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button type="button" class="btn-mini" id="btnRemezclar" style="display:none;">🔀 Remezclar</button>
+      <div class="switch" id="toggleAleatorio"></div>
+    </div>
+  </div>
 
-  <select id="selectForma">
-    <option value="circulo">Círculo</option>
-    <option value="cuadrado">Cuadrado</option>
-    <option value="rombo">Rombo</option>
-    <option value="hexagono">Hexágono</option>
-    <option value="estrella">Estrella</option>
-    <option value="trefoil">Trefoil</option>
-    <option value="astroide">Astroide</option>
-    <option value="cuatrifolio">Cuatrifolio</option>
-  </select>
-
-  <div class="toggle-row"><span class="toggle-label">Borde blanco</span><div class="switch on" id="toggleBorde"></div></div>
+  <div class="section-title">Forma de puntos</div>
+  <div class="toggle-row"><span class="toggle-label">Formas variadas</span><div class="switch" id="toggleFormasVariadas"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Mostrar borde</span><div class="switch on" id="toggleBorde"></div></div>
+  <input type="color" id="colorBorde" value="#F0EFEA">
   <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
   <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
   <div class="slider-row">
     <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
-    <input type="range" id="sliderTamano" min="6" max="20" value="11">
+    <input type="range" id="sliderTamano" min="6" max="80" value="11">
   </div>
 
   <div class="section-title">Conexiones</div>
   <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
-  <div class="toggle-row"><span class="toggle-label">Conectar todas entre sí</span><div class="switch" id="toggleMesh"></div></div>
-  <div class="toggle-row"><span class="toggle-label">Líneas curvas</span><div class="switch" id="toggleCurva"></div></div>
-  <select id="selectEstiloLinea">
-    <option value="solida">Línea sólida</option>
-    <option value="punteada">Punteada</option>
-    <option value="discontinua">Discontinua</option>
-  </select>
-  <input type="color" id="colorLinea" value="#211F1B">
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Opacidad de líneas</span><span id="valOpacidadLinea">22%</span></div>
-    <input type="range" id="sliderOpacidadLinea" min="5" max="100" value="22">
-  </div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
-    <input type="range" id="sliderGrosor" min="0.5" max="4" step="0.1" value="1.2">
+  <div id="conexionesExtra">
+    <div class="toggle-row"><span class="toggle-label">Conectar todas entre sí</span><div class="switch" id="toggleMesh"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Líneas curvas</span><div class="switch" id="toggleCurva"></div></div>
+    <select id="selectEstiloLinea">
+      <option value="solida">Línea sólida</option>
+      <option value="punteada">Punteada</option>
+      <option value="discontinua">Discontinua</option>
+    </select>
+    <input type="color" id="colorLinea" value="#211F1B">
+    <div class="slider-row">
+      <div class="slider-row-label"><span>Opacidad de líneas</span><span id="valOpacidadLinea">22%</span></div>
+      <input type="range" id="sliderOpacidadLinea" min="5" max="100" value="22">
+    </div>
+    <div class="slider-row">
+      <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
+      <input type="range" id="sliderGrosor" min="0.5" max="15" step="0.1" value="1.2">
+    </div>
   </div>
 
   <div class="section-title">Mapa de fondo</div>
   <div class="toggle-row"><span class="toggle-label">Mostrar mapa base</span><div class="switch on" id="toggleBase"></div></div>
-  <div class="segmented">
-    <button id="btnDetalleMinimo" class="active">Mínimo</button>
-    <button id="btnDetalleEstandar">Estándar</button>
-  </div>
-  <div class="segmented">
-    <button id="btnMapaEstandar" class="active">Color</button>
-    <button id="btnMapaGris">Gris</button>
-  </div>
+  <select id="selectBasemap">
+    <option value="grisClaro">Gris claro (sin texto)</option>
+    <option value="grisOscuro">Gris oscuro (sin texto)</option>
+    <option value="satelital">Satelital (sin texto)</option>
+    <option value="terreno">Terreno (sin texto)</option>
+    <option value="osm">Calles y nombres (OSM)</option>
+  </select>
+  <div class="toggle-row"><span class="toggle-label">Blanco y negro</span><div class="switch" id="toggleBN"></div></div>
   <div class="slider-row">
     <div class="slider-row-label"><span>Opacidad del mapa</span><span id="valOpacidad">80%</span></div>
     <input type="range" id="sliderOpacidad" min="10" max="100" value="80">
   </div>
+
+  <details>
+    <summary>Personalizar cada universidad</summary>
+    <div id="personalizarLista" style="margin-top:10px;"></div>
+  </details>
 </div>
 
 <div class="credit">TFI · Diseño y Comunicación Visual · UNLa</div>
@@ -288,7 +269,7 @@
     {name:"Universidad Nacional de General Sarmiento", sigla:"UNGS", lat:-34.5231018, lng:-58.7004776, zona:"oeste"},
     {name:"Universidad Nacional de Lomas de Zamora", sigla:"UNLZ", lat:-34.7752894, lng:-58.4524943, zona:"sur"},
     {name:"Universidad Nacional de La Matanza", sigla:"UNLaM", lat:-34.6707576, lng:-58.5628052, zona:"oeste"},
-    {name:"Universidad Nacional de Luján", sigla:"UNLu", lat:-34.5787784, lng:-59.0860517, zona:"oeste"},
+    {name:"Universidad Nacional de Pilar", sigla:"UNPILAR", lat:-34.4373662, lng:-58.8926657, zona:"norte"},
     {name:"Universidad Nacional de Tres de Febrero", sigla:"UNTREF", lat:-34.6051125, lng:-58.5643368, zona:"norte"},
     {name:"Universidad Nacional de San Martín", sigla:"UNSAM", lat:-34.5796486, lng:-58.5266262, zona:"norte"},
     {name:"Universidad Nacional de Avellaneda", sigla:"UNDAV", lat:-34.6629898, lng:-58.3722513, zona:"sur"},
@@ -306,14 +287,16 @@
 
   const coloresPorZona = { norte: "#2E7D6B", oeste: "#C97A2B", sur: "#5B4B8A" };
   const coloresIndividuales = {
-    UNLa: "#2E7D6B", UNQ: "#C97A2B", UNGS: "#5B4B8A", UNLZ: "#B4436C",
-    UNLaM: "#3B6E8F", UNLu: "#8C9C3F", UNTREF: "#A65B3F", UNSAM: "#4E6E58",
-    UNDAV: "#7A4E9E", UNAJ: "#C4622D", UNM: "#2F5D8A", UNPAZ: "#9C4F4F",
-    UNAHUR: "#5E8B7E", UNO: "#8A6E3F", UNAB: "#6B4E71", UNSO: "#3F7C6E",
+    UNDAV: "#004395", UNTREF: "#24639a", UNSO: "#003363", UNLZ: "#0004f6",
+    UNAJ: "#2799d6", UNQ: "#c4122e", UNLa: "#8e0028", UNPAZ: "#20386d",
+    UNO: "#009bd1", UNM: "#2f4187", UNAB: "#215086", UNSAM: "#7a9fc3",
+    UNLaM: "#029353", UNPILAR: "#14589f", UNAHUR: "#56a42c", UNGS: "#005f8f",
   };
 
-  // ---- FORMAS (clip-path). Las polygon() usan % y escalan solas.
-  // Las curvas (trefoil/astroide/cuatrifolio) se recalculan según el tamaño (size, en px). ----
+  // Forma asignada a cada universidad en modo "formas variadas" (mismo orden que "universidades")
+  const asignacionFormas = ["circulo","cuadrado","rombo","hexagono","estrella","trefoil","astroide","cuatrifolio","cuadrado","circulo","estrella","rombo","cuatrifolio","hexagono","trefoil","astroide"];
+
+  // ---- FORMAS (clip-path), parametrizadas por tamaño en px ----
   function circleUnionPath(centers, r){
     return centers.map(([cx,cy]) => `M ${cx+r} ${cy} A ${r} ${r} 0 1 0 ${cx-r} ${cy} A ${r} ${r} 0 1 0 ${cx+r} ${cy} Z`).join(' ');
   }
@@ -338,59 +321,18 @@
       return `path('${circleUnionPath(centers, r)}')`;
     },
   };
-  let formaGlobal = "circulo";
-  let conBorde = true;
 
-  function getDotStyle(u, colorMode, tamano) {
-    const color = colorMode === "individual"
-      ? (coloresIndividuales[u.sigla] || "#888")
-      : (coloresPorZona[u.zona] || "#888");
-    const forma = u.forma || formaGlobal;
-    const clip = (FORMAS[forma] || FORMAS.circulo)(tamano);
-    const border = conBorde ? "1.5px solid " + getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() : "none";
-    return `background:${color}; width:${tamano}px; height:${tamano}px; clip-path:${clip}; -webkit-clip-path:${clip}; border:${border};`;
-  }
-
-  // ---- Líneas curvas: puntos intermedios en arco cuadrático ----
-  const CURVATURA = 0.18;
-  function puntosCurva(p1, p2, curvo){
-    if (!curvo) return [p1, p2];
-    const [lat1,lng1] = p1, [lat2,lng2] = p2;
-    const mx = (lat1+lat2)/2, my = (lng1+lng2)/2;
-    const dx = lng2-lng1, dy = lat2-lat1;
-    const cx = mx - dy*CURVATURA, cy = my + dx*CURVATURA;
-    const pts = [];
-    const STEPS = 24;
-    for (let i=0;i<=STEPS;i++){
-      const t = i/STEPS;
-      const lat = (1-t)*(1-t)*lat1 + 2*(1-t)*t*cx + t*t*lat2;
-      const lng = (1-t)*(1-t)*lng1 + 2*(1-t)*t*cy + t*t*lng2;
-      pts.push([lat,lng]);
-    }
-    return pts;
-  }
-
-  const map = L.map('map', {
-    zoomControl: false, attributionControl: true, minZoom: 8, maxZoom: 13,
-  }).setView([-34.66, -58.62], 10);
-
-  // Basemap sin texto (default): Esri World Light Gray Base — sin API key.
-  const tileMinimo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
-    opacity: 0.8, maxZoom: 16,
-  });
-  // Basemap estándar con nombres: OpenStreetMap.
-  const tileEstandar = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    subdomains: 'abc', opacity: 0.8, maxZoom: 19,
-  });
-  let baseLayer = tileMinimo.addTo(map);
-
-  const edgesGroup = L.layerGroup().addTo(map);
-  const markersGroup = L.layerGroup().addTo(map);
+  // Overrides individuales (se completan solo si tocás la sección "Personalizar cada universidad")
+  const formaOverride = {};
+  const colorOverride = {};
+  const imagenOverride = {};
 
   let estado = {
     colorMode: "zona",
+    formasVariadas: false,
+    aleatorioIndividual: false,
+    conBorde: true,
+    colorBorde: "#F0EFEA",
     pointSize: 11,
     mesh: false,
     curva: false,
@@ -400,6 +342,77 @@
     lineDash: null,
   };
 
+  const coloresAleatorios = {};
+  function generarColoresAleatorios(){
+    universidades.forEach(u => {
+      const h = Math.floor(Math.random()*360);
+      coloresAleatorios[u.sigla] = `hsl(${h}, 55%, 45%)`;
+    });
+  }
+
+  function colorDe(u){
+    if (colorOverride[u.sigla]) return colorOverride[u.sigla];
+    if (estado.colorMode === "individual") {
+      return estado.aleatorioIndividual ? (coloresAleatorios[u.sigla] || "#888") : (coloresIndividuales[u.sigla] || "#888");
+    }
+    return coloresPorZona[u.zona] || "#888";
+  }
+  function formaDe(u){
+    return formaOverride[u.sigla] || (estado.formasVariadas ? (asignacionFormas[universidades.indexOf(u)] || "circulo") : "circulo");
+  }
+
+  function buildShapeHtml(u, size){
+    const color = colorDe(u);
+    const imagen = imagenOverride[u.sigla];
+    if (imagen) {
+      return `<div class="point-marker" style="width:${size}px;height:${size}px;background:${color};-webkit-mask-image:url('${imagen}');mask-image:url('${imagen}');-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;"></div>`;
+    }
+    const forma = formaDe(u);
+    const clip = (FORMAS[forma] || FORMAS.circulo)(size);
+    if (!estado.conBorde) {
+      return `<div class="point-marker" style="width:${size}px;height:${size}px;background:${color};clip-path:${clip};-webkit-clip-path:${clip};"></div>`;
+    }
+    const bw = 2;
+    const innerSize = Math.max(1, size - bw*2);
+    const clipInner = (FORMAS[forma] || FORMAS.circulo)(innerSize);
+    return `<div class="point-marker" style="width:${size}px;height:${size}px;background:${estado.colorBorde};clip-path:${clip};-webkit-clip-path:${clip};">
+      <div style="position:absolute;top:${bw}px;left:${bw}px;width:${innerSize}px;height:${innerSize}px;background:${color};clip-path:${clipInner};-webkit-clip-path:${clipInner};"></div>
+    </div>`;
+  }
+
+  // ---- Líneas curvas ----
+  const CURVATURA = 0.18;
+  function puntosCurva(p1, p2, curvo){
+    if (!curvo) return [p1, p2];
+    const [lat1,lng1] = p1, [lat2,lng2] = p2;
+    const mx = (lat1+lat2)/2, my = (lng1+lng2)/2;
+    const dx = lng2-lng1, dy = lat2-lat1;
+    const cx = mx - dy*CURVATURA, cy = my + dx*CURVATURA;
+    const pts = []; const STEPS = 24;
+    for (let i=0;i<=STEPS;i++){
+      const t = i/STEPS;
+      const lat = (1-t)*(1-t)*lat1 + 2*(1-t)*t*cx + t*t*lat2;
+      const lng = (1-t)*(1-t)*lng1 + 2*(1-t)*t*cy + t*t*lng2;
+      pts.push([lat,lng]);
+    }
+    return pts;
+  }
+
+  const map = L.map('map', { zoomControl: false, attributionControl: true, minZoom: 8, maxZoom: 13 }).setView([-34.66, -58.62], 10);
+
+  const ATTR_ESRI = 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
+  const basemaps = {
+    grisClaro: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 16 }),
+    grisOscuro: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 16 }),
+    satelital: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 18 }),
+    terreno: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 13 }),
+    osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', subdomains: 'abc', opacity: 0.8, maxZoom: 19 }),
+  };
+  let baseLayer = basemaps.grisClaro.addTo(map);
+
+  const edgesGroup = L.layerGroup().addTo(map);
+  const markersGroup = L.layerGroup().addTo(map);
+
   function renderEdges(){
     edgesGroup.clearLayers();
     const pares = estado.mesh ? todosLosPares(universidades.length) : edgesCurados;
@@ -407,61 +420,71 @@
       const p1 = [universidades[i].lat, universidades[i].lng];
       const p2 = [universidades[j].lat, universidades[j].lng];
       const latlngs = puntosCurva(p1, p2, estado.curva);
-      L.polyline(latlngs, {
-        color: estado.lineColor, opacity: estado.lineOpacity,
-        weight: estado.lineWeight, dashArray: estado.lineDash,
-        smoothFactor: 1,
-      }).addTo(edgesGroup);
+      L.polyline(latlngs, { color: estado.lineColor, opacity: estado.lineOpacity, weight: estado.lineWeight, dashArray: estado.lineDash, smoothFactor: 1 }).addTo(edgesGroup);
     });
   }
 
   function renderMarkers() {
     markersGroup.clearLayers();
-    const wrapH = Math.max(18, estado.pointSize + 4);
+    const size = estado.pointSize;
+    const wrapH = Math.max(18, size + 6);
     const anchorY = Math.round(wrapH / 2);
     universidades.forEach(u => {
       const icon = L.divIcon({
         className: '',
-        html: `<div class="marker-wrap" style="height:${wrapH}px;"><div class="point-dot" style="${getDotStyle(u, estado.colorMode, estado.pointSize)}"></div><span class="point-label">${u.sigla}</span></div>`,
-        iconSize: [100, wrapH],
-        iconAnchor: [Math.round(estado.pointSize / 2), anchorY],
+        html: `<div class="marker-wrap" style="height:${wrapH}px;">${buildShapeHtml(u, size)}<span class="point-label">${u.sigla}</span></div>`,
+        iconSize: [130, wrapH],
+        iconAnchor: [Math.round(size / 2), anchorY],
       });
-      L.marker([u.lat, u.lng], { icon })
-        .addTo(markersGroup)
+      L.marker([u.lat, u.lng], { icon }).addTo(markersGroup)
         .bindPopup(`<b>${u.sigla}</b><br>${u.name}<div class="meta">Zona ${u.zona} · ${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</div>`);
     });
   }
   renderEdges();
   renderMarkers();
 
-  // ---- Controles: panel on/off ----
+  // ---- Panel on/off ----
   document.getElementById('panelToggleBtn').addEventListener('click', function(){
     document.getElementById('panel').classList.toggle('oculto');
   });
 
   // ---- Color de puntos ----
   document.getElementById('btnColorZona').addEventListener('click', function(){
-    estado.colorMode = "zona";
-    this.classList.add('active');
+    estado.colorMode = "zona"; this.classList.add('active');
     document.getElementById('btnColorIndividual').classList.remove('active');
     document.getElementById('legendZona').style.display = "flex";
+    document.getElementById('filaAleatorio').style.display = "none";
     renderMarkers();
   });
   document.getElementById('btnColorIndividual').addEventListener('click', function(){
-    estado.colorMode = "individual";
-    this.classList.add('active');
+    estado.colorMode = "individual"; this.classList.add('active');
     document.getElementById('btnColorZona').classList.remove('active');
     document.getElementById('legendZona').style.display = "none";
+    document.getElementById('filaAleatorio').style.display = "flex";
+    renderMarkers();
+  });
+  document.getElementById('toggleAleatorio').addEventListener('click', function(){
+    estado.aleatorioIndividual = this.classList.toggle('on');
+    document.getElementById('btnRemezclar').style.display = estado.aleatorioIndividual ? 'inline-block' : 'none';
+    if (estado.aleatorioIndividual && Object.keys(coloresAleatorios).length === 0) generarColoresAleatorios();
+    renderMarkers();
+  });
+  document.getElementById('btnRemezclar').addEventListener('click', function(){
+    generarColoresAleatorios();
     renderMarkers();
   });
 
   // ---- Forma / borde / tamaño ----
-  document.getElementById('selectForma').addEventListener('change', function(){
-    formaGlobal = this.value;
+  document.getElementById('toggleFormasVariadas').addEventListener('click', function(){
+    estado.formasVariadas = this.classList.toggle('on');
     renderMarkers();
   });
   document.getElementById('toggleBorde').addEventListener('click', function(){
-    conBorde = this.classList.toggle('on');
+    estado.conBorde = this.classList.toggle('on');
+    renderMarkers();
+  });
+  document.getElementById('colorBorde').addEventListener('input', function(){
+    estado.colorBorde = this.value;
     renderMarkers();
   });
   document.getElementById('togglePoints').addEventListener('click', function(){
@@ -482,6 +505,7 @@
   document.getElementById('toggleEdges').addEventListener('click', function(){
     const on = this.classList.toggle('on');
     if (on) edgesGroup.addTo(map); else map.removeLayer(edgesGroup);
+    document.getElementById('conexionesExtra').classList.toggle('disabled-block', !on);
   });
   document.getElementById('toggleMesh').addEventListener('click', function(){
     estado.mesh = this.classList.toggle('on');
@@ -496,8 +520,7 @@
     renderEdges();
   });
   document.getElementById('colorLinea').addEventListener('input', function(){
-    estado.lineColor = this.value;
-    renderEdges();
+    estado.lineColor = this.value; renderEdges();
   });
   document.getElementById('sliderOpacidadLinea').addEventListener('input', function(){
     estado.lineOpacity = this.value / 100;
@@ -515,36 +538,73 @@
     const on = this.classList.toggle('on');
     if (on) baseLayer.addTo(map); else map.removeLayer(baseLayer);
   });
-  function cambiarBasemap(nuevo){
+  document.getElementById('selectBasemap').addEventListener('change', function(){
     const onMapa = map.hasLayer(baseLayer);
     map.removeLayer(baseLayer);
-    baseLayer = nuevo;
+    baseLayer = basemaps[this.value];
     baseLayer.setOpacity(document.getElementById('sliderOpacidad').value / 100);
     if (onMapa) baseLayer.addTo(map);
-  }
-  document.getElementById('btnDetalleMinimo').addEventListener('click', function(){
-    this.classList.add('active');
-    document.getElementById('btnDetalleEstandar').classList.remove('active');
-    cambiarBasemap(tileMinimo);
   });
-  document.getElementById('btnDetalleEstandar').addEventListener('click', function(){
-    this.classList.add('active');
-    document.getElementById('btnDetalleMinimo').classList.remove('active');
-    cambiarBasemap(tileEstandar);
-  });
-  document.getElementById('btnMapaEstandar').addEventListener('click', function(){
-    this.classList.add('active');
-    document.getElementById('btnMapaGris').classList.remove('active');
-    document.body.classList.remove('mapa-gris');
-  });
-  document.getElementById('btnMapaGris').addEventListener('click', function(){
-    this.classList.add('active');
-    document.getElementById('btnMapaEstandar').classList.remove('active');
-    document.body.classList.add('mapa-gris');
+  document.getElementById('toggleBN').addEventListener('click', function(){
+    document.body.classList.toggle('mapa-gris', this.classList.toggle('on'));
   });
   document.getElementById('sliderOpacidad').addEventListener('input', function(){
     baseLayer.setOpacity(this.value / 100);
     document.getElementById('valOpacidad').textContent = this.value + '%';
+  });
+
+  // ---- Personalización individual ----
+  const listaEl = document.getElementById('personalizarLista');
+  const opcionesForma = ["predeterminada","circulo","cuadrado","rombo","hexagono","estrella","trefoil","astroide","cuatrifolio"];
+  universidades.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'fila-uni';
+    const selForma = opcionesForma.map(f => `<option value="${f}">${f === "predeterminada" ? "— forma —" : f}</option>`).join('');
+    row.innerHTML = `
+      <span>${u.sigla}</span>
+      <select data-sigla="${u.sigla}" class="sel-forma-uni">${selForma}</select>
+      <input type="color" data-sigla="${u.sigla}" class="col-uni" value="${colorDe(u)}">
+      <div class="fila-uni-file">
+        <input type="file" accept=".svg,.png,image/svg+xml,image/png" data-sigla="${u.sigla}" class="file-uni">
+        <button type="button" class="btn-mini" data-sigla="${u.sigla}">Quitar</button>
+      </div>`;
+    listaEl.appendChild(row);
+  });
+  listaEl.querySelectorAll('.sel-forma-uni').forEach(sel => {
+    sel.addEventListener('change', function(){
+      const sigla = this.dataset.sigla;
+      if (this.value === 'predeterminada') delete formaOverride[sigla];
+      else formaOverride[sigla] = this.value;
+      renderMarkers();
+    });
+  });
+  listaEl.querySelectorAll('.col-uni').forEach(inp => {
+    inp.addEventListener('input', function(){
+      colorOverride[this.dataset.sigla] = this.value;
+      renderMarkers();
+    });
+  });
+  listaEl.querySelectorAll('.file-uni').forEach(inp => {
+    inp.addEventListener('change', function(){
+      const sigla = this.dataset.sigla;
+      const file = this.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e){
+        imagenOverride[sigla] = e.target.result;
+        renderMarkers();
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+  listaEl.querySelectorAll('.btn-mini').forEach(btn => {
+    btn.addEventListener('click', function(){
+      const sigla = this.dataset.sigla;
+      delete imagenOverride[sigla];
+      const row = this.closest('.fila-uni');
+      row.querySelector('.file-uni').value = '';
+      renderMarkers();
+    });
   });
 </script>
 
