@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Red de Universidades del Conurbano Bonaerense</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!--
+  ============================================================
+  GUÍA RÁPIDA DE PERSONALIZACIÓN
+  ============================================================
+
+  1) COLORES
+     - Colores por zona: objeto "coloresPorZona" en el <script>.
+     - Colores individuales: objeto "coloresIndividuales" (una
+       entrada por sigla). Estos son los que vas a querer
+       ajustar vos; ahora tienen variedad de prueba.
+
+  2) FORMAS DE LOS PUNTOS (para cambiar más adelante)
+     Buscá el objeto "FORMAS" en el <script>. Cada forma es un
+     valor de CSS clip-path. Ya viene con: circulo, cuadrado,
+     triangulo, diamante. Para usar otra forma en una
+     universidad puntual, agregale el campo "forma" a su objeto
+     en el array "universidades" (ej: forma:"triangulo"). Si no
+     se especifica, usa "circulo" por defecto. Para agregar una
+     forma nueva, sumá una entrada a FORMAS con su clip-path
+     (podés generar clip-paths en clippy.wtf/clip-path).
+
+  3) DATOS DE LAS UNIVERSIDADES
+     Array "universidades": name, sigla, lat, lng, zona (y
+     opcionalmente forma). Sumá o borrá objetos para
+     agregar/sacar universidades.
+
+  4) CONEXIONES
+     Array "edges": pares de índices (posición en el array de
+     universidades, empezando en 0) que quedan unidos por una
+     línea.
+
+  5) LOS BOTONES DE MOSTRAR/OCULTAR
+     Están todos armados con clases CSS sobre <body>
+     (body.ocultar-puntos, body.ocultar-nombres, etc). Si
+     querés que alguno arranque apagado, agregá la clase
+     correspondiente directo en el <body> más abajo.
+  ============================================================
+-->
+
+<style>
+  :root{
+    --bg: #F0EFEA;
+    --ink: #211F1B;
+    --ink-soft: rgba(33,31,27,0.55);
+    --line: rgba(33,31,27,0.22);
+    --panel-bg: rgba(240,239,234,0.94);
+    --zona-norte: #2E7D6B;
+    --zona-oeste: #C97A2B;
+    --zona-sur: #5B4B8A;
+    --font: 'IBM Plex Sans', sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html, body{
+    margin:0; padding:0; height:100%; width:100%;
+    background: var(--bg);
+    font-family: var(--font);
+    color: var(--ink);
+    overflow:hidden;
+  }
+  #map{ position:absolute; inset:0; background: var(--bg); }
+  .leaflet-tile-pane{ filter: grayscale(0.4) contrast(0.95); transition: opacity 0.5s ease; }
+  .leaflet-control-attribution{
+    background: rgba(240,239,234,0.7) !important;
+    color: var(--ink-soft) !important;
+    font-size: 10px !important;
+  }
+  .leaflet-control-zoom{ display:none; }
+
+  /* Ocultar puntos / nombres / conexiones vía clases en <body> */
+  body.ocultar-puntos .point-dot{ display:none; }
+  body.ocultar-nombres .point-label{ display:none; }
+
+  .panel{
+    position:absolute; top:20px; left:20px; z-index:1000;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 16px 18px;
+    width: 250px;
+    backdrop-filter: blur(6px);
+  }
+  .panel h1{
+    font-size: 14.5px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
+  }
+  .panel p{
+    margin: 0 0 14px 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+
+  .section-title{
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    margin: 0 0 8px 0;
+  }
+
+  .legend{ display:flex; flex-direction:column; gap:6px; margin-bottom: 14px; }
+  .legend-item{ display:flex; align-items:center; gap:8px; font-size:11.5px; }
+  .legend-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+
+  .segmented{
+    display:flex; border: 1px solid var(--line); border-radius: 4px;
+    overflow:hidden; margin-bottom: 14px;
+  }
+  .segmented button{
+    flex:1; border:none; background: transparent; color: var(--ink);
+    font-family: var(--font); font-size: 11px; padding: 6px 0; cursor:pointer;
+  }
+  .segmented button.active{ background: var(--ink); color: var(--bg); }
+
+  .toggle-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 7px 0;
+  }
+  .toggle-label{ font-size: 12px; }
+  .switch{
+    position: relative; width: 34px; height: 19px;
+    background: rgba(33,31,27,0.18);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink:0;
+  }
+  .switch.on{ background: var(--ink); }
+  .switch::after{
+    content:''; position:absolute; top:2px; left:2px;
+    width:15px; height:15px; border-radius:50%;
+    background: var(--bg);
+    transition: transform 0.2s ease;
+  }
+  .switch.on::after{ transform: translateX(15px); }
+  .toggles{ border-top: 1px solid var(--line); padding-top: 4px; }
+
+  /* Marcador: contenedor ancho para que el punto nunca se aplaste */
+  .marker-wrap{
+    display:flex; align-items:center;
+    width: 100px; height: 18px;
+    pointer-events: none;
+  }
+  .point-dot{
+    width: 11px; height: 11px;
+    flex: 0 0 11px;
+    background: #888;
+    border: 1.5px solid var(--bg);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .point-label{
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--ink);
+    white-space: nowrap;
+    margin-left: 6px;
+  }
+
+  .leaflet-popup-content-wrapper{
+    background: var(--bg); color: var(--ink); border-radius: 3px;
+    border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  }
+  .leaflet-popup-tip{ background: var(--bg); }
+  .leaflet-popup-content{ font-family: var(--font); font-size: 12.5px; margin: 9px 11px; }
+  .leaflet-popup-content b{ font-weight:600; }
+  .leaflet-popup-content .meta{ color: var(--ink-soft); font-size:11px; }
+
+  .credit{
+    position:absolute; bottom:14px; right:16px; z-index:1000;
+    font-size: 10px; color: var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="panel">
+  <h1>Universidades del conurbano</h1>
+  <p>16 universidades nacionales del conurbano bonaerense.</p>
+
+  <div class="section-title">Color de los puntos</div>
+  <div class="segmented">
+    <button id="btnColorZona" class="active">Por zona</button>
+    <button id="btnColorIndividual">Individual</button>
+  </div>
+
+  <div class="legend" id="legendZona">
+    <div class="legend-item"><span class="legend-dot" style="background:var(--zona-norte)"></span>Zona Norte</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--zona-oeste)"></span>Zona Oeste</div>
+    <div class="legend-item"><span class="legend-dot" style="background:var(--zona-sur)"></span>Zona Sur</div>
+  </div>
+
+  <div class="toggles">
+    <div class="toggle-row"><span class="toggle-label">Mostrar mapa base</span><div class="switch on" id="toggleBase"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
+    <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
+  </div>
+</div>
+
+<div class="credit">TFI · Diseño y Comunicación Visual · UNLa</div>
+
+<script>
+  // ---- DATOS: sumá/sacá universidades acá ----
+  // Campo opcional "forma": "circulo" (default), "cuadrado", "triangulo", "diamante"
+  const universidades = [
+    {name:"Universidad Nacional de Lanús", sigla:"UNLa", lat:-34.7355252, lng:-58.3910807, zona:"sur"},
+    {name:"Universidad Nacional de Quilmes", sigla:"UNQ", lat:-34.7065325, lng:-58.2783994, zona:"sur"},
+    {name:"Universidad Nacional de General Sarmiento", sigla:"UNGS", lat:-34.5231018, lng:-58.7004776, zona:"oeste"},
+    {name:"Universidad Nacional de Lomas de Zamora", sigla:"UNLZ", lat:-34.7752894, lng:-58.4524943, zona:"sur"},
+    {name:"Universidad Nacional de La Matanza", sigla:"UNLaM", lat:-34.6707576, lng:-58.5628052, zona:"oeste"},
+    {name:"Universidad Nacional de Luján", sigla:"UNLu", lat:-34.5787784, lng:-59.0860517, zona:"oeste"},
+    {name:"Universidad Nacional de Tres de Febrero", sigla:"UNTREF", lat:-34.6051125, lng:-58.5643368, zona:"norte"},
+    {name:"Universidad Nacional de San Martín", sigla:"UNSAM", lat:-34.5796486, lng:-58.5266262, zona:"norte"},
+    {name:"Universidad Nacional de Avellaneda", sigla:"UNDAV", lat:-34.6629898, lng:-58.3722513, zona:"sur"},
+    {name:"Universidad Nacional Arturo Jauretche", sigla:"UNAJ", lat:-34.7747628, lng:-58.2675846, zona:"sur"},
+    {name:"Universidad Nacional de Moreno", sigla:"UNM", lat:-34.651094, lng:-58.7767131, zona:"oeste"},
+    {name:"Universidad Nacional de José C. Paz", sigla:"UNPAZ", lat:-34.5210505, lng:-58.7454128, zona:"oeste"},
+    {name:"Universidad Nacional de Hurlingham", sigla:"UNAHUR", lat:-34.6165168, lng:-58.6344234, zona:"norte"},
+    {name:"Universidad Nacional del Oeste", sigla:"UNO", lat:-34.6643457, lng:-58.7338502, zona:"oeste"},
+    {name:"Universidad Nacional Guillermo Brown", sigla:"UNAB", lat:-34.8382094, lng:-58.3857243, zona:"sur"},
+    {name:"Universidad Nacional Raúl Scalabrini Ortiz", sigla:"UNSO", lat:-34.465463, lng:-58.5095559, zona:"norte"},
+  ];
+
+  // Conexiones (pares de índices del array de arriba)
+  const edges = [[6,12],[6,15],[4,6],[4,12],[12,13],[5,10],[0,8],[0,14],[2,11],[1,9],[10,11],[1,8],[6,7],[7,15],[4,7],[3,14],[5,11],[0,3],[0,9],[10,13],[2,12]];
+
+  // Colores por zona
+  const coloresPorZona = { norte: "#2E7D6B", oeste: "#C97A2B", sur: "#5B4B8A" };
+
+  // Colores individuales por sigla — variedad de arranque, pensada para que la ajustes vos
+  const coloresIndividuales = {
+    UNLa: "#2E7D6B", UNQ: "#C97A2B", UNGS: "#5B4B8A", UNLZ: "#B4436C",
+    UNLaM: "#3B6E8F", UNLu: "#8C9C3F", UNTREF: "#A65B3F", UNSAM: "#4E6E58",
+    UNDAV: "#7A4E9E", UNAJ: "#C4622D", UNM: "#2F5D8A", UNPAZ: "#9C4F4F",
+    UNAHUR: "#5E8B7E", UNO: "#8A6E3F", UNAB: "#6B4E71", UNSO: "#3F7C6E",
+  };
+
+  // Formas disponibles (clip-path). "circulo" no necesita clip-path (usa border-radius).
+  const FORMAS = {
+    circulo: null,
+    cuadrado: null, // sin clip-path, solo border-radius:0 (ver getDotStyle)
+    triangulo: "polygon(50% 0%, 0% 100%, 100% 100%)",
+    diamante: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)",
+  };
+
+  function getDotStyle(u, colorMode) {
+    const color = colorMode === "individual"
+      ? (coloresIndividuales[u.sigla] || "#888")
+      : (coloresPorZona[u.zona] || "#888");
+    const forma = u.forma || "circulo";
+    const clip = FORMAS[forma];
+    const borderRadius = forma === "circulo" ? "50%" : "0";
+    const clipRule = clip ? `clip-path:${clip};` : "";
+    return `background:${color}; border-radius:${borderRadius}; ${clipRule}`;
+  }
+
+  const map = L.map('map', {
+    zoomControl: false,
+    attributionControl: true,
+    minZoom: 8,
+    maxZoom: 13,
+  }).setView([-34.66, -58.62], 10);
+
+  const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: 'abcd',
+    opacity: 0.8,
+  }).addTo(map);
+
+  const edgesGroup = L.layerGroup(
+    edges.map(([i, j]) => L.polyline(
+      [[universidades[i].lat, universidades[i].lng], [universidades[j].lat, universidades[j].lng]],
+      { color: "#211F1B", opacity: 0.22, weight: 1.2 }
+    ))
+  ).addTo(map);
+
+  const markersGroup = L.layerGroup().addTo(map);
+  let colorMode = "zona";
+
+  function renderMarkers() {
+    markersGroup.clearLayers();
+    universidades.forEach(u => {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="marker-wrap"><div class="point-dot" style="${getDotStyle(u, colorMode)}"></div><span class="point-label">${u.sigla}</span></div>`,
+        iconSize: [100, 18],
+        iconAnchor: [5, 9],
+      });
+      L.marker([u.lat, u.lng], { icon })
+        .addTo(markersGroup)
+        .bindPopup(`<b>${u.sigla}</b><br>${u.name}<div class="meta">Zona ${u.zona} · ${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</div>`);
+    });
+  }
+  renderMarkers();
+
+  // ---- Controles ----
+  document.getElementById('toggleBase').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    if (on) baseLayer.addTo(map); else map.removeLayer(baseLayer);
+  });
+  document.getElementById('toggleEdges').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    if (on) edgesGroup.addTo(map); else map.removeLayer(edgesGroup);
+  });
+  document.getElementById('togglePoints').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    document.body.classList.toggle('ocultar-puntos', !on);
+  });
+  document.getElementById('toggleLabels').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    document.body.classList.toggle('ocultar-nombres', !on);
+  });
+  document.getElementById('btnColorZona').addEventListener('click', function(){
+    colorMode = "zona";
+    this.classList.add('active');
+    document.getElementById('btnColorIndividual').classList.remove('active');
+    document.getElementById('legendZona').style.display = "flex";
+    renderMarkers();
+  });
+  document.getElementById('btnColorIndividual').addEventListener('click', function(){
+    colorMode = "individual";
+    this.classList.add('active');
+    document.getElementById('btnColorZona').classList.remove('active');
+    document.getElementById('legendZona').style.display = "none";
+    renderMarkers();
+  });
+</script>
+
+</body>
+</html>
