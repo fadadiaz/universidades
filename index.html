@@ -72,10 +72,19 @@
      "#conexionesExtra".
 
   7) PERSPECTIVA
-     Sección "Perspectiva": presets Plana / Inclinada / Rasante,
-     y sliders de inclinación (0–80°) y rotación (±180°).
-     Con el mouse: clic derecho (o Ctrl) + arrastrar. En pantallas
-     táctiles: dos dedos. Valores iniciales en "VISTA_INICIAL".
+     Presets Plana (0°) / Inclinada / Rasante / 90° (vista lateral,
+     con la cámara a ras del suelo), sliders de inclinación (0–90°)
+     y rotación (±180°). Con el mouse: clic derecho (o Ctrl) +
+     arrastrar. En pantallas táctiles: dos dedos. Valores
+     iniciales en "VISTA_INICIAL".
+     "Lente" es el campo visual de la cámara: con un lente ancho
+     (37°, el normal) las líneas verticales se abren en abanico
+     desde el centro de la pantalla; con un lente cerrado
+     ("Ortogonal", 2°) todas las verticales se ven paralelas. El
+     motor de MapLibre no dibuja con lentes muy cerrados a
+     inclinaciones altas, así que el mínimo sube solo (2° hasta
+     60° de inclinación, 3° hasta 75°, 10° por encima; ver
+     fovMinimo) y se recupera al bajar la inclinación.
 
   8) ALTURA DE LOS PUNTOS
      "Altura" eleva TODOS los puntos la misma cantidad de metros
@@ -95,7 +104,22 @@
  10) SOMBRA EN EL SUELO (experimental)
      Mancha difusa bajo cada punto elevado, que se aplasta según
      la inclinación. Es un recurso visual, no una sombra
-     proyectada real (ver notas de viabilidad en la respuesta).
+     proyectada real.
+
+ 11) ZONAS
+     Sección "Zonas": el interruptor muestra/oculta cada zona
+     (puntos, nombres, líneas verticales y las conexiones que
+     tocan esa zona); "solo" deja visible únicamente esa zona; el
+     círculo de color cambia el color de la zona en el modo "Por
+     zona". Estado en estado.zonasVisibles y coloresPorZona.
+
+ 12) COLOR Y FORMA GLOBALES
+     Color: "Por zona", "Individual" (un color por universidad,
+     con opción aleatoria) o "Uno solo". Forma: un selector para
+     que todos los puntos sean iguales, o "Variadas" (usa
+     asignacionFormas). Elegir una opción global borra los ajustes
+     individuales de ese tipo (forma o color); el botón "Quitar
+     todos los ajustes individuales" borra además las imágenes.
   ============================================================
 -->
 
@@ -189,6 +213,16 @@
 
   .disabled-block{ opacity: 0.35; pointer-events: none; }
 
+  .zona-row{ display:flex; align-items:center; gap:8px; padding:4px 0; }
+  .zona-row .zona-nombre{ flex:1; font-size:12px; }
+  .zona-row .zona-nombre em{ font-style:normal; color: var(--ink-soft); font-size:10.5px; margin-left:4px; }
+  .zona-row input[type=color]{ width:20px; height:20px; padding:0; margin:0; border:1px solid var(--line); border-radius:50%; background:none; overflow:hidden; flex-shrink:0; }
+  .zona-row input[type=color]::-webkit-color-swatch-wrapper{ padding:0; }
+  .zona-row input[type=color]::-webkit-color-swatch{ border:none; border-radius:50%; }
+  .zona-row input[type=color]::-moz-color-swatch{ border:none; border-radius:50%; }
+  .zona-row.zona-off .zona-nombre{ opacity:0.45; }
+  .fila-botones{ display:flex; gap:6px; flex-wrap:wrap; margin: 4px 0 8px 0; }
+
   details{ margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
   summary{ cursor:pointer; font-size: 11.5px; font-weight: 500; }
   .fila-uni{ display:grid; grid-template-columns: 44px 1fr 34px; gap:6px; align-items:center; margin-bottom:6px; }
@@ -240,16 +274,25 @@
     <button id="btnVistaPlana">Plana</button>
     <button id="btnVistaInclinada">Inclinada</button>
     <button id="btnVistaRasante">Rasante</button>
+    <button id="btnVistaLateral">90°</button>
   </div>
   <div class="slider-row">
     <div class="slider-row-label"><span>Inclinación</span><span id="valPitch">50°</span></div>
-    <input type="range" id="sliderPitch" min="0" max="80" step="1" value="50">
+    <input type="range" id="sliderPitch" min="0" max="90" step="1" value="50">
   </div>
   <div class="slider-row">
     <div class="slider-row-label"><span>Rotación</span><span id="valBearing">0°</span></div>
     <input type="range" id="sliderBearing" min="-180" max="180" step="1" value="0">
   </div>
-  <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Lente (perspectiva)</span><span id="valLente">37°</span></div>
+    <input type="range" id="sliderLente" min="2" max="60" step="1" value="37">
+  </div>
+  <div class="fila-botones">
+    <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
+    <button type="button" class="btn-mini" id="btnLenteNormal">Lente normal</button>
+    <button type="button" class="btn-mini" id="btnLenteOrtogonal">Ortogonal</button>
+  </div>
   <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para inclinar y rotar. En pantallas táctiles, dos dedos.</p>
 
   <div class="section-title">Altura de los puntos</div>
@@ -271,16 +314,22 @@
   </div>
   <div class="toggle-row"><span class="toggle-label">Sombra en el suelo (experimental)</span><div class="switch" id="toggleSombra"></div></div>
 
+  <div class="section-title">Zonas</div>
+  <div id="zonasLista">
+    <div class="zona-row" data-zona="norte"><input type="color" class="zona-color" data-zona="norte" value="#2E7D6B" title="Color de la zona"><span class="zona-nombre">Zona Norte<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="norte">solo</button><div class="switch on zona-switch" data-zona="norte"></div></div>
+    <div class="zona-row" data-zona="oeste"><input type="color" class="zona-color" data-zona="oeste" value="#C97A2B" title="Color de la zona"><span class="zona-nombre">Zona Oeste<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="oeste">solo</button><div class="switch on zona-switch" data-zona="oeste"></div></div>
+    <div class="zona-row" data-zona="sur"><input type="color" class="zona-color" data-zona="sur" value="#5B4B8A" title="Color de la zona"><span class="zona-nombre">Zona Sur<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="sur">solo</button><div class="switch on zona-switch" data-zona="sur"></div></div>
+  </div>
+  <div class="fila-botones"><button type="button" class="btn-mini" id="btnTodasZonas">Mostrar todas</button></div>
+  <p class="hint">El interruptor muestra u oculta la zona (puntos, nombres, líneas y conexiones). El círculo de color define el color de la zona en el modo "Por zona".</p>
+
   <div class="section-title">Color de puntos</div>
   <div class="segmented">
     <button id="btnColorZona" class="active">Por zona</button>
     <button id="btnColorIndividual">Individual</button>
+    <button id="btnColorUnico">Uno solo</button>
   </div>
-  <div class="legend" id="legendZona">
-    <div class="legend-item"><span class="legend-dot" style="background:var(--zona-norte)"></span>Zona Norte</div>
-    <div class="legend-item"><span class="legend-dot" style="background:var(--zona-oeste)"></span>Zona Oeste</div>
-    <div class="legend-item"><span class="legend-dot" style="background:var(--zona-sur)"></span>Zona Sur</div>
-  </div>
+  <input type="color" id="colorUnico" value="#211F1B" style="display:none;">
   <div class="toggle-row" id="filaAleatorio" style="display:none;">
     <span class="toggle-label">Colores aleatorios</span>
     <div style="display:flex;align-items:center;gap:8px;">
@@ -290,7 +339,18 @@
   </div>
 
   <div class="section-title">Forma de puntos</div>
-  <div class="toggle-row"><span class="toggle-label">Formas variadas</span><div class="switch" id="toggleFormasVariadas"></div></div>
+  <select id="selectFormaGlobal">
+    <option value="circulo">Todos círculos</option>
+    <option value="cuadrado">Todos cuadrados</option>
+    <option value="rombo">Todos rombos</option>
+    <option value="hexagono">Todos hexágonos</option>
+    <option value="estrella">Todas estrellas</option>
+    <option value="trefoil">Todos tréboles (3)</option>
+    <option value="cuatrifolio">Todos tréboles (4)</option>
+    <option value="astroide">Todos astroides</option>
+    <option value="variadas">Variadas (una distinta por universidad)</option>
+  </select>
+  <p class="hint">Elegir una forma o un color global reemplaza los ajustes individuales de ese tipo.</p>
   <div class="toggle-row"><span class="toggle-label">Mostrar borde</span><div class="switch on" id="toggleBorde"></div></div>
   <input type="color" id="colorBorde" value="#F0EFEA">
   <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
@@ -421,11 +481,13 @@
 
   // Vista con la que abre el mapa (zoom de MapLibre = zoom de Leaflet − 1 con teselas de 256px)
   const VISTA_INICIAL = { center: [-58.62, -34.66], zoom: 9, pitch: 50, bearing: 0 };
-  const PRESETS_VISTA = { btnVistaPlana: 0, btnVistaInclinada: 50, btnVistaRasante: 72 };
+  const PRESETS_VISTA = { btnVistaPlana: 0, btnVistaInclinada: 50, btnVistaRasante: 72, btnVistaLateral: 90 };
 
   let estado = {
-    colorMode: "zona",
-    formasVariadas: false,
+    colorMode: "zona",          // "zona" | "individual" | "unico"
+    colorUnico: "#211F1B",
+    formaGlobal: "circulo",     // "variadas" | circulo | cuadrado | rombo | hexagono | estrella | trefoil | astroide | cuatrifolio
+    zonasVisibles: { norte: true, oeste: true, sur: true },
     aleatorioIndividual: false,
     conBorde: true,
     colorBorde: "#F0EFEA",
@@ -467,13 +529,16 @@
 
   function colorDe(u){
     if (colorOverride[u.sigla]) return colorOverride[u.sigla];
+    if (estado.colorMode === "unico") return estado.colorUnico;
     if (estado.colorMode === "individual") {
       return estado.aleatorioIndividual ? (coloresAleatorios[u.sigla] || "#888") : (coloresIndividuales[u.sigla] || "#888");
     }
     return coloresPorZona[u.zona] || "#888";
   }
   function formaDe(u){
-    return formaOverride[u.sigla] || (estado.formasVariadas ? (asignacionFormas[universidades.indexOf(u)] || "circulo") : "circulo");
+    if (formaOverride[u.sigla]) return formaOverride[u.sigla];
+    if (estado.formaGlobal === "variadas") return asignacionFormas[universidades.indexOf(u)] || "circulo";
+    return estado.formaGlobal;
   }
 
   function buildShapeHtml(u, size){
@@ -538,7 +603,7 @@
     zoom: VISTA_INICIAL.zoom,
     pitch: VISTA_INICIAL.pitch,
     bearing: VISTA_INICIAL.bearing,
-    minZoom: 7, maxZoom: 12, maxPitch: 80,
+    minZoom: 7, maxZoom: 12, maxPitch: 90,
     renderWorldCopies: false,
     attributionControl: { compact: true },
   });
@@ -567,37 +632,40 @@
 
   // ---- PROYECCIÓN 3D ----
   // MapLibre solo proyecta puntos a nivel del suelo (map.project). Para un punto elevado se reconstruye la
-  // posición de la cámara con datos públicos (centro, zoom, inclinación, rotación, campo visual) y se
-  // busca dónde cae en el suelo el rayo cámara → punto elevado: ese punto del suelo se ve en el mismo
-  // píxel que el punto en altura. Así se reutiliza la proyección exacta del motor.
+  // cámara con datos públicos (centro, zoom, inclinación, rotación y campo visual) y se proyecta el punto
+  // en 3D con una cámara de agujero (pinhole). Funciona con cualquier inclinación, incluidos los 90°
+  // (cámara a ras del suelo), y con cualquier lente, desde perspectiva fuerte hasta casi ortogonal.
   const TILE_MAP = 512;
   function posicionCamara(){
     const c = map.getCenter();
     const p = map.getPitch() * Math.PI/180;
     const b = map.getBearing() * Math.PI/180;
     const fov = map.getVerticalFieldOfView() * Math.PI/180;
-    const altoPx = map.getContainer().clientHeight;
+    const mapDiv = map.getContainer();
+    const W = mapDiv.clientWidth, H = mapDiv.clientHeight;
     const mundoPx = TILE_MAP * Math.pow(2, map.getZoom());
-    const d = 0.5 * altoPx / Math.tan(fov/2) / mundoPx;   // distancia cámara–centro en unidades mercator
+    const focal = 0.5 * H / Math.tan(fov/2);            // distancia focal en px
+    const d = focal / mundoPx;                          // distancia cámara–centro en unidades mercator
     const mc = maplibregl.MercatorCoordinate.fromLngLat(c);
-    return { x: mc.x - Math.sin(b)*d*Math.sin(p), y: mc.y + Math.cos(b)*d*Math.sin(p), z: d*Math.cos(p) };
+    const sp = Math.sin(p), cp = Math.cos(p), sb = Math.sin(b), cb = Math.cos(b);
+    return {
+      x: mc.x - sb*d*sp, y: mc.y + cb*d*sp, z: d*cp,    // posición (x este, y sur, z arriba)
+      f: [sb*sp, -cb*sp, -cp],                          // hacia dónde mira
+      r: [cb, sb, 0],                                   // derecha de la pantalla
+      u: [sb*cp, -cb*cp, sp],                           // arriba de la pantalla
+      focal, W, H,
+    };
   }
 
-  // Devuelve {x, y, d2} en píxeles de pantalla, o null si el punto queda a la altura de la cámara o por encima.
+  // Devuelve {x, y, depth} en píxeles de pantalla, o null si el punto queda detrás de la cámara.
   function proyectar3D(lng, lat, alt, cam){
     const mc = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
-    const dx = mc.x - cam.x, dy = mc.y - cam.y;
-    if (!alt) {
-      const s = map.project([lng, lat]);
-      return { x: s.x, y: s.y, d2: dx*dx + dy*dy + cam.z*cam.z };
-    }
-    const pz = alt * mc.meterInMercatorCoordinateUnits();
-    const dz = cam.z - pz;
-    if (dz <= cam.z*0.02) return null;
-    const t = cam.z / dz;
-    const q = new maplibregl.MercatorCoordinate(cam.x + dx*t, cam.y + dy*t, 0).toLngLat();
-    const s = map.project(q);
-    return { x: s.x, y: s.y, d2: dx*dx + dy*dy + dz*dz };
+    const vx = mc.x - cam.x, vy = mc.y - cam.y, vz = alt * mc.meterInMercatorCoordinateUnits() - cam.z;
+    const depth = vx*cam.f[0] + vy*cam.f[1] + vz*cam.f[2];
+    if (depth <= 1e-9) return null;
+    const sx = vx*cam.r[0] + vy*cam.r[1] + vz*cam.r[2];
+    const su = vx*cam.u[0] + vy*cam.u[1] + vz*cam.u[2];
+    return { x: cam.W/2 + cam.focal*sx/depth, y: cam.H/2 - cam.focal*su/depth, depth };
   }
 
   // ---- PUNTOS (HTML plano, tamaño en px de pantalla) ----
@@ -647,8 +715,9 @@
 
     const cam = posicionCamara();
     const pitch = map.getPitch() * Math.PI/180;
-    const suelo = universidades.map(u => proyectar3D(u.lng, u.lat, 0, cam));
-    const aire  = universidades.map(u => proyectar3D(u.lng, u.lat, altoDe(u), cam));
+    const visible = u => estado.zonasVisibles[u.zona] !== false;
+    const suelo = universidades.map(u => visible(u) ? proyectar3D(u.lng, u.lat, 0, cam) : null);
+    const aire  = universidades.map(u => visible(u) ? proyectar3D(u.lng, u.lat, altoDe(u), cam) : null);
 
     // 1) sombra difusa bajo cada punto elevado
     if (estado.sombra) {
@@ -677,6 +746,7 @@
       ctx.setLineDash(DASH[estado.lineEstilo] || []);
       pares.forEach(([i, j]) => {
         const A = universidades[i], B = universidades[j];
+        if (!visible(A) || !visible(B)) return;
         const base = (estado.nivelConexion === 'altura') ? (altoDe(A) + altoDe(B)) / 2 : 0;
         ctx.beginPath();
         let trazando = false;
@@ -707,7 +777,7 @@
     }
 
     // 4) puntos + nombres: se mueven con la cámara; los más lejanos quedan detrás
-    const orden = universidades.map((_, i) => i).filter(i => aire[i]).sort((a, b) => aire[b].d2 - aire[a].d2);
+    const orden = universidades.map((_, i) => i).filter(i => aire[i]).sort((a, b) => aire[b].depth - aire[a].depth);
     marcadores.forEach((m, i) => { if (!aire[i]) m.el.style.display = 'none'; });
     orden.forEach((i, rank) => {
       const m = marcadores[i], p = aire[i];
@@ -765,6 +835,29 @@
   elPitch.addEventListener('input', function(){ map.setPitch(parseFloat(this.value)); });
   elBearing.addEventListener('input', function(){ map.setBearing(parseFloat(this.value)); });
   document.getElementById('btnNorte').addEventListener('click', function(){ map.easeTo({ bearing: 0, duration: 700 }); });
+  // Lente: el motor de MapLibre deja de dibujar el mapa con lentes muy cerrados a inclinaciones altas
+  // (medido: ≥65° falla con 1°; ≥85° falla con ≤4°; a 90° falla con ≤5°). Por eso el mínimo sube solo
+  // con la inclinación y el valor elegido se recupera al volver a bajarla.
+  const LENTE_NORMAL = 36.87;
+  let lenteDeseada = LENTE_NORMAL;
+  function fovMinimo(pitch){ return pitch <= 60 ? 2 : (pitch <= 75 ? 3 : 10); }
+  const elLente = document.getElementById('sliderLente');
+  function textoLente(v){ return v <= 3 ? 'casi ortogonal' : Math.round(v) + '°'; }
+  function aplicarLente(){
+    const min = fovMinimo(map.getPitch());
+    const ef = Math.max(lenteDeseada, min);
+    if (Math.abs(map.getVerticalFieldOfView() - ef) > 0.01) map.setVerticalFieldOfView(ef);
+    elLente.min = min;
+    elLente.value = ef;
+    document.getElementById('valLente').textContent = textoLente(ef) + (ef > lenteDeseada + 0.01 ? ' (mín. con esta inclinación)' : '');
+  }
+  elLente.min = 2; elLente.max = 60; elLente.value = LENTE_NORMAL;
+  elLente.addEventListener('input', function(){ lenteDeseada = parseFloat(this.value); aplicarLente(); });
+  document.getElementById('btnLenteNormal').addEventListener('click', function(){ lenteDeseada = LENTE_NORMAL; aplicarLente(); });
+  document.getElementById('btnLenteOrtogonal').addEventListener('click', function(){ lenteDeseada = 2; aplicarLente(); });
+  map.on('move', aplicarLente);
+  map.on('load', aplicarLente);
+  aplicarLente();
 
   // ---- Altura y línea vertical ----
   function fmtMetros(m){
@@ -796,35 +889,86 @@
     dibujar();
   });
 
-  // ---- Color de puntos ----
-  document.getElementById('btnColorZona').addEventListener('click', function(){
-    estado.colorMode = "zona"; this.classList.add('active');
-    document.getElementById('btnColorIndividual').classList.remove('active');
-    document.getElementById('legendZona').style.display = "flex";
-    document.getElementById('filaAleatorio').style.display = "none";
-    renderMarkers();
+  // ---- Zonas: visibilidad y color ----
+  function aplicarZonas(){
+    document.querySelectorAll('.zona-row').forEach(row => {
+      const z = row.dataset.zona, on = estado.zonasVisibles[z];
+      row.querySelector('.zona-switch').classList.toggle('on', on);
+      row.classList.toggle('zona-off', !on);
+    });
+    if (popupIdx !== null && !estado.zonasVisibles[universidades[popupIdx].zona]) { popupIdx = null; actualizarPopup(); }
+    dibujar();
+  }
+  ['norte', 'oeste', 'sur'].forEach(z => {
+    const n = universidades.filter(u => u.zona === z).length;
+    document.querySelector(`.zona-row[data-zona="${z}"] em`).textContent = '· ' + n;
   });
-  document.getElementById('btnColorIndividual').addEventListener('click', function(){
-    estado.colorMode = "individual"; this.classList.add('active');
-    document.getElementById('btnColorZona').classList.remove('active');
-    document.getElementById('legendZona').style.display = "none";
-    document.getElementById('filaAleatorio').style.display = "flex";
+  document.querySelectorAll('.zona-switch').forEach(sw => {
+    sw.addEventListener('click', function(){
+      estado.zonasVisibles[this.dataset.zona] = !estado.zonasVisibles[this.dataset.zona];
+      aplicarZonas();
+    });
+  });
+  document.querySelectorAll('.btn-solo').forEach(btn => {
+    btn.addEventListener('click', function(){
+      Object.keys(estado.zonasVisibles).forEach(z => { estado.zonasVisibles[z] = (z === this.dataset.zona); });
+      aplicarZonas();
+    });
+  });
+  document.getElementById('btnTodasZonas').addEventListener('click', function(){
+    Object.keys(estado.zonasVisibles).forEach(z => { estado.zonasVisibles[z] = true; });
+    aplicarZonas();
+  });
+  document.querySelectorAll('.zona-color').forEach(inp => {
+    inp.addEventListener('input', function(){
+      const z = this.dataset.zona;
+      coloresPorZona[z] = this.value;
+      // el color de zona reemplaza los colores individuales de las universidades de esa zona
+      universidades.forEach(u => { if (u.zona === z) delete colorOverride[u.sigla]; });
+      sincronizarFilas();
+      renderMarkers();
+    });
+  });
+
+  // ---- Color de puntos (global) ----
+  function setModoColor(modo){
+    estado.colorMode = modo;
+    Object.keys(colorOverride).forEach(k => delete colorOverride[k]); // lo global reemplaza lo individual
+    document.getElementById('btnColorZona').classList.toggle('active', modo === 'zona');
+    document.getElementById('btnColorIndividual').classList.toggle('active', modo === 'individual');
+    document.getElementById('btnColorUnico').classList.toggle('active', modo === 'unico');
+    document.getElementById('filaAleatorio').style.display = (modo === 'individual') ? 'flex' : 'none';
+    document.getElementById('colorUnico').style.display = (modo === 'unico') ? 'block' : 'none';
+    sincronizarFilas();
+    renderMarkers();
+  }
+  document.getElementById('btnColorZona').addEventListener('click', () => setModoColor('zona'));
+  document.getElementById('btnColorIndividual').addEventListener('click', () => setModoColor('individual'));
+  document.getElementById('btnColorUnico').addEventListener('click', () => setModoColor('unico'));
+  document.getElementById('colorUnico').addEventListener('input', function(){
+    estado.colorUnico = this.value;
+    Object.keys(colorOverride).forEach(k => delete colorOverride[k]);
+    sincronizarFilas();
     renderMarkers();
   });
   document.getElementById('toggleAleatorio').addEventListener('click', function(){
     estado.aleatorioIndividual = this.classList.toggle('on');
     document.getElementById('btnRemezclar').style.display = estado.aleatorioIndividual ? 'inline-block' : 'none';
     if (estado.aleatorioIndividual && Object.keys(coloresAleatorios).length === 0) generarColoresAleatorios();
+    sincronizarFilas();
     renderMarkers();
   });
   document.getElementById('btnRemezclar').addEventListener('click', function(){
     generarColoresAleatorios();
+    sincronizarFilas();
     renderMarkers();
   });
 
-  // ---- Forma / borde / tamaño ----
-  document.getElementById('toggleFormasVariadas').addEventListener('click', function(){
-    estado.formasVariadas = this.classList.toggle('on');
+  // ---- Forma (global) / borde / tamaño ----
+  document.getElementById('selectFormaGlobal').addEventListener('change', function(){
+    estado.formaGlobal = this.value;
+    Object.keys(formaOverride).forEach(k => delete formaOverride[k]); // lo global reemplaza lo individual
+    sincronizarFilas();
     renderMarkers();
   });
   document.getElementById('toggleBorde').addEventListener('click', function(){
@@ -919,6 +1063,27 @@
       </div>`;
     listaEl.appendChild(row);
   });
+  // Convierte cualquier color CSS (incl. hsl) a #rrggbb, que es lo que acepta <input type="color">
+  const _cc = document.createElement('canvas').getContext('2d');
+  function aHex(c){ _cc.fillStyle = '#000'; _cc.fillStyle = c; return _cc.fillStyle; }
+  function sincronizarFilas(){
+    universidades.forEach(u => {
+      const sel = listaEl.querySelector(`.sel-forma-uni[data-sigla="${u.sigla}"]`);
+      const col = listaEl.querySelector(`.col-uni[data-sigla="${u.sigla}"]`);
+      if (sel) sel.value = formaOverride[u.sigla] || 'predeterminada';
+      if (col) col.value = aHex(colorDe(u));
+    });
+  }
+  const btnReset = document.createElement('button');
+  btnReset.type = 'button'; btnReset.className = 'btn-mini'; btnReset.textContent = 'Quitar todos los ajustes individuales';
+  btnReset.style.marginBottom = '10px';
+  btnReset.addEventListener('click', function(){
+    [formaOverride, colorOverride, imagenOverride].forEach(o => Object.keys(o).forEach(k => delete o[k]));
+    listaEl.querySelectorAll('.file-uni').forEach(f => { f.value = ''; });
+    sincronizarFilas();
+    renderMarkers();
+  });
+  listaEl.insertBefore(btnReset, listaEl.firstChild);
   listaEl.querySelectorAll('.sel-forma-uni').forEach(sel => {
     sel.addEventListener('change', function(){
       const sigla = this.dataset.sigla;
@@ -946,7 +1111,7 @@
       reader.readAsDataURL(file);
     });
   });
-  listaEl.querySelectorAll('.btn-mini').forEach(btn => {
+  listaEl.querySelectorAll('.btn-mini[data-sigla]').forEach(btn => {
     btn.addEventListener('click', function(){
       const sigla = this.dataset.sigla;
       delete imagenOverride[sigla];
