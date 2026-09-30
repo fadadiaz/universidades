@@ -85,6 +85,10 @@
      inclinaciones altas, así que el mínimo sube solo (2° hasta
      60° de inclinación, 3° hasta 75°, 10° por encima; ver
      fovMinimo) y se recupera al bajar la inclinación.
+     Con inclinación de 80° o más la navegación cambia (ver
+     PITCH_NAV_ALTO): zoom alrededor del centro, arrastre propio
+     y sin doble clic ni teclado, porque los controles nativos
+     fallan con el suelo casi de canto.
 
   8) ALTURA DE LOS PUNTOS
      "Altura" eleva TODOS los puntos la misma cantidad de metros
@@ -289,10 +293,25 @@
     <input type="range" id="sliderLente" min="2" max="60" step="1" value="37">
   </div>
   <div class="fila-botones">
-    <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
     <button type="button" class="btn-mini" id="btnLenteNormal">Lente normal</button>
     <button type="button" class="btn-mini" id="btnLenteOrtogonal">Ortogonal</button>
   </div>
+  <div class="toggle-row"><span class="toggle-label">Cámara a la altura de los puntos</span><div class="switch on" id="toggleCamSigue"></div></div>
+  <div class="slider-row" id="filaCamAltura">
+    <div class="slider-row-label"><span>Altura de la cámara</span><span id="valCamAltura">5 km</span></div>
+    <input type="range" id="sliderCamAltura" min="0" max="20000" step="250" value="5000">
+  </div>
+  <p class="hint">Con la cámara a la altura de los puntos, a 85–90° todos quedan sobre la línea del horizonte y el zoom no los saca de la pantalla. Con la cámara a ras de suelo se los ve desde abajo.</p>
+
+  <div class="section-title">Navegación</div>
+  <div class="fila-botones">
+    <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
+    <button type="button" class="btn-mini" id="btnRecentrar">Recentrar</button>
+    <button type="button" class="btn-mini" id="btnVistaInicial">Vista inicial</button>
+  </div>
+  <div class="toggle-row"><span class="toggle-label">Zoom hacia el cursor</span><div class="switch" id="toggleZoomCursor"></div></div>
+  <div class="toggle-row" id="filaBloqueoPitch"><span class="toggle-label">Bloquear inclinación al rotar</span><div class="switch" id="toggleBloqueoPitch"></div></div>
+  <p class="hint">Zoom centrado: la rueda acerca hacia el centro de la pantalla y no hacia donde apunta el cursor, así los puntos no se corren. El mapa no te deja alejarte más de ~40 km de las universidades; “Recentrar” te devuelve al centro.</p>
   <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para inclinar y rotar. En pantallas táctiles, dos dedos.</p>
 
   <div class="section-title">Altura de los puntos</div>
@@ -494,6 +513,8 @@
     pointSize: 11,
     // altura y línea vertical
     alto: 5000,              // metros sobre el terreno
+    camSigue: true,          // la cámara mira desde la altura de los puntos
+    camAltura: 0,            // altura manual de la cámara (si camSigue es false)
     stemOn: true,
     stemColor: "#211F1B",
     stemOpacity: 0.55,
@@ -604,6 +625,9 @@
     pitch: VISTA_INICIAL.pitch,
     bearing: VISTA_INICIAL.bearing,
     minZoom: 7, maxZoom: 12, maxPitch: 90,
+    centerClampedToGround: false,   // permite que la cámara mire desde la altura de los puntos
+    elevation: estado.camSigue ? estado.alto : estado.camAltura,
+    doubleClickZoom: false,         // el doble clic no debe mover el mapa hacia un punto lejano
     renderWorldCopies: false,
     attributionControl: { compact: true },
   });
@@ -647,9 +671,10 @@
     const focal = 0.5 * H / Math.tan(fov/2);            // distancia focal en px
     const d = focal / mundoPx;                          // distancia cámara–centro en unidades mercator
     const mc = maplibregl.MercatorCoordinate.fromLngLat(c);
+    const zc = map.getCenterElevation() * mc.meterInMercatorCoordinateUnits();   // altura del punto que mira la cámara
     const sp = Math.sin(p), cp = Math.cos(p), sb = Math.sin(b), cb = Math.cos(b);
     return {
-      x: mc.x - sb*d*sp, y: mc.y + cb*d*sp, z: d*cp,    // posición (x este, y sur, z arriba)
+      x: mc.x - sb*d*sp, y: mc.y + cb*d*sp, z: zc + d*cp,   // posición (x este, y sur, z arriba)
       f: [sb*sp, -cb*sp, -cp],                          // hacia dónde mira
       r: [cb, sb, 0],                                   // derecha de la pantalla
       u: [sb*cp, -cb*cp, sp],                           // arriba de la pantalla
@@ -681,6 +706,7 @@
       el.innerHTML = `<div class="marker-wrap" style="height:${wrapH}px;">${buildShapeHtml(u, size)}<span class="point-label">${u.sigla}</span></div>`;
       el.querySelector('.point-marker').addEventListener('click', function(ev){
         ev.stopPropagation();
+        if (typeof suprimirClick !== 'undefined' && suprimirClick) return;
         popupIdx = (popupIdx === idx) ? null : idx;
         actualizarPopup();
         dibujar();
@@ -835,6 +861,62 @@
   elPitch.addEventListener('input', function(){ map.setPitch(parseFloat(this.value)); });
   elBearing.addEventListener('input', function(){ map.setBearing(parseFloat(this.value)); });
   document.getElementById('btnNorte').addEventListener('click', function(){ map.easeTo({ bearing: 0, duration: 700 }); });
+  // ---- Navegación con inclinación alta ----
+  // Con el suelo casi de canto, los controles nativos de MapLibre dejan de ser confiables: el zoom y el
+  // arrastre calculan sobre qué punto del suelo está el cursor, y a 90° ese punto no existe (el centro sale
+  // disparado cientos de km) o casi no hay desplazamiento (85°–89.9°). Desde PITCH_NAV_ALTO se usa:
+  //   · zoom con la rueda / pellizco alrededor del centro de la pantalla (nativo, opción around:'center')
+  //   · arrastre con un dedo o botón izquierdo: desplazamiento propio, como si la vista fuera cenital
+  //   · doble clic y teclado nativos desactivados (tienen el mismo problema)
+  // El clic derecho / Ctrl + arrastrar (rotar e inclinar) es nativo y funciona en todo el rango.
+  const PITCH_NAV_ALTO = 80;
+  let navAlto = false;
+  function actualizarNavegacion(){
+    const alto = map.getPitch() >= PITCH_NAV_ALTO;
+    if (alto === navAlto) return;
+    navAlto = alto;
+    map.scrollZoom.disable();       map.scrollZoom.enable(alto ? { around: 'center' } : undefined);
+    map.touchZoomRotate.disable();  map.touchZoomRotate.enable(alto ? { around: 'center' } : undefined);
+    if (alto) { map.doubleClickZoom.disable(); map.keyboard.disable(); }
+    else      { map.doubleClickZoom.enable();  map.keyboard.enable(); }
+  }
+  map.on('pitch', actualizarNavegacion);
+  map.on('load', actualizarNavegacion);
+  actualizarNavegacion();
+
+  // Desplazar el centro dx, dy píxeles de pantalla (arrastrar hacia la derecha mueve el centro al oeste, etc.)
+  function desplazarCentroPx(dx, dy){
+    const b = map.getBearing() * Math.PI/180;
+    const mundoPx = TILE_MAP * Math.pow(2, map.getZoom());
+    const mc = maplibregl.MercatorCoordinate.fromLngLat(map.getCenter());
+    const nx = mc.x - Math.cos(b)*dx/mundoPx + Math.sin(b)*dy/mundoPx;
+    const ny = mc.y - Math.sin(b)*dx/mundoPx - Math.cos(b)*dy/mundoPx;
+    map.setCenter(new maplibregl.MercatorCoordinate(nx, ny, 0).toLngLat());
+  }
+  let arrastre = null;
+  let suprimirClick = false;
+  contenedor.addEventListener('pointerdown', function(e){
+    if (!navAlto || e.button !== 0 || e.ctrlKey || e.metaKey || !e.isPrimary) return;
+    if (e.target.closest && e.target.closest('.popup')) return;
+    map.dragPan.disable();   // que el arrastre nativo no compita con el propio
+    arrastre = { id: e.pointerId, x: e.clientX, y: e.clientY, total: 0 };
+  }, true);
+  window.addEventListener('pointermove', function(e){
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    const dx = e.clientX - arrastre.x, dy = e.clientY - arrastre.y;
+    arrastre.x = e.clientX; arrastre.y = e.clientY;
+    arrastre.total += Math.abs(dx) + Math.abs(dy);
+    if (dx || dy) desplazarCentroPx(dx, dy);
+  });
+  function finArrastre(e){
+    if (!arrastre || e.pointerId !== arrastre.id) return;
+    if (arrastre.total > 4) { suprimirClick = true; setTimeout(() => { suprimirClick = false; }, 0); }
+    arrastre = null;
+    map.dragPan.enable();
+  }
+  window.addEventListener('pointerup', finArrastre);
+  window.addEventListener('pointercancel', finArrastre);
+
   // Lente: el motor de MapLibre deja de dibujar el mapa con lentes muy cerrados a inclinaciones altas
   // (medido: ≥65° falla con 1°; ≥85° falla con ≤4°; a 90° falla con ≤5°). Por eso el mínimo sube solo
   // con la inclinación y el valor elegido se recupera al volver a bajarla.
@@ -859,6 +941,86 @@
   map.on('load', aplicarLente);
   aplicarLente();
 
+  // ---- Altura de la cámara ----
+  // Con la cámara a la altura de los puntos y una vista casi horizontal, todos caen sobre la misma línea
+  // (la del horizonte) sin importar su distancia. Con la cámara a ras de suelo se los ve desde abajo y el
+  // zoom los saca de la pantalla por arriba.
+  function alturaCamara(){ return estado.camSigue ? estado.alto : estado.camAltura; }
+  function aplicarAlturaCamara(){
+    const h = alturaCamara();
+    if (Math.abs(map.getCenterElevation() - h) > 0.5) map.setCenterElevation(h);
+    const fila = document.getElementById('filaCamAltura');
+    fila.classList.toggle('disabled-block', estado.camSigue);
+    document.getElementById('sliderCamAltura').value = h;
+    document.getElementById('valCamAltura').textContent = fmtMetros(h);
+  }
+  document.getElementById('toggleCamSigue').addEventListener('click', function(){
+    estado.camSigue = this.classList.toggle('on');
+    if (!estado.camSigue) estado.camAltura = map.getCenterElevation();
+    aplicarAlturaCamara();
+  });
+  document.getElementById('sliderCamAltura').addEventListener('input', function(){
+    estado.camAltura = parseInt(this.value, 10);
+    aplicarAlturaCamara();
+  });
+  map.on('load', aplicarAlturaCamara);
+
+  // ---- Navegación ----
+  // Zoom centrado en la pantalla (no hacia el cursor) para que la zona de puntos no se corra al acercar.
+  function aplicarZoomCursor(){
+    const haciaCursor = document.getElementById('toggleZoomCursor').classList.contains('on');
+    // enable() no hace nada si el gesto ya está activo, así que hay que desactivar primero
+    map.scrollZoom.disable();
+    map.scrollZoom.enable(haciaCursor ? {} : { around: 'center' });
+    map.touchZoomRotate.disable();
+    map.touchZoomRotate.enable(haciaCursor ? {} : { around: 'center' });
+    if (haciaCursor) map.doubleClickZoom.enable(); else map.doubleClickZoom.disable();
+  }
+  document.getElementById('toggleZoomCursor').addEventListener('click', function(){
+    this.classList.toggle('on'); aplicarZoomCursor();
+  });
+  aplicarZoomCursor();
+
+  // Rotar con el mouse (clic derecho o Ctrl + arrastrar) mueve el ángulo con el movimiento horizontal y la
+  // inclinación con el vertical. Este interruptor deja solo el ángulo. Usa un manejador interno de MapLibre
+  // (versión fijada 5.24.0); si no existe, el control se oculta.
+  const manejadorPitch = map.dragRotate && map.dragRotate._mousePitch;
+  if (!manejadorPitch || typeof manejadorPitch.disable !== 'function') {
+    document.getElementById('filaBloqueoPitch').style.display = 'none';
+  }
+  document.getElementById('toggleBloqueoPitch').addEventListener('click', function(){
+    const bloquear = this.classList.toggle('on');
+    if (bloquear) manejadorPitch.disable(); else manejadorPitch.enable();
+  });
+
+  document.getElementById('btnRecentrar').addEventListener('click', function(){
+    map.easeTo({ center: VISTA_INICIAL.center, duration: 700 });
+  });
+  document.getElementById('btnVistaInicial').addEventListener('click', function(){
+    map.easeTo({ center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch: VISTA_INICIAL.pitch, bearing: VISTA_INICIAL.bearing, duration: 900 });
+  });
+
+  // Límite de navegación: el centro no puede alejarse más de ~40 km de las universidades. Se aplica
+  // durante el gesto (como una pared) y no solo al soltar, porque a inclinaciones altas un arrastre
+  // sobre el fondo lejano puede mover el mapa cientos de kilómetros en un instante.
+  const LIMITES = (function(){
+    const lats = universidades.map(u => u.lat), lngs = universidades.map(u => u.lng), pad = 0.35;
+    return { latMin: Math.min(...lats) - pad, latMax: Math.max(...lats) + pad, lngMin: Math.min(...lngs) - pad, lngMax: Math.max(...lngs) + pad };
+  })();
+  let limitando = false;
+  function limitarCentro(){
+    if (limitando) return;
+    const c = map.getCenter();
+    const lat = Math.min(LIMITES.latMax, Math.max(LIMITES.latMin, c.lat));
+    const lng = Math.min(LIMITES.lngMax, Math.max(LIMITES.lngMin, c.lng));
+    if (Math.abs(lat - c.lat) > 1e-6 || Math.abs(lng - c.lng) > 1e-6) {
+      limitando = true;
+      try { map.setCenter([lng, lat]); } finally { limitando = false; }
+    }
+  }
+  map.on('move', limitarCentro);
+  map.on('moveend', limitarCentro);
+
   // ---- Altura y línea vertical ----
   function fmtMetros(m){
     return m >= 1000 ? (m/1000).toFixed(2).replace(/\.?0+$/, '') + ' km' : m + ' m';
@@ -866,6 +1028,7 @@
   document.getElementById('sliderAltura').addEventListener('input', function(){
     estado.alto = parseInt(this.value, 10);
     document.getElementById('valAltura').textContent = fmtMetros(estado.alto);
+    aplicarAlturaCamara();
     dibujar();
   });
   document.getElementById('toggleStem').addEventListener('click', function(){
