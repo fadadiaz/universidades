@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Red de Universidades del Conurbano Bonaerense</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" />
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 
@@ -13,6 +13,15 @@
   ============================================================
   GUÍA RÁPIDA DE PERSONALIZACIÓN
   ============================================================
+
+  0) QUÉ CAMBIÓ RESPECTO A LA VERSIÓN CON LEAFLET
+     El mapa base ahora es MapLibre GL JS (WebGL), que permite
+     inclinar (pitch) y rotar (bearing) la vista. Los puntos, los
+     nombres, las conexiones y las líneas verticales se dibujan
+     encima con la misma cámara, así que siguen "pegados" al
+     territorio al inclinar, rotar o hacer zoom. Los puntos siguen
+     siendo elementos HTML planos (mismas formas, mismo borde,
+     mismas imágenes SVG/PNG): no se deforman con la perspectiva.
 
   1) ASIGNACIÓN DE FORMAS "VARIADAS"
      Array "asignacionFormas": una forma por universidad, en el
@@ -42,23 +51,51 @@
      silueta, no solo círculos.
 
   4) TAMAÑOS
-     "sliderTamano" ahora llega hasta 80px y "sliderGrosor"
-     (grosor de líneas) hasta 15px, pensado para uso artístico,
-     no solo funcional.
+     "sliderTamano" llega hasta 80px y "sliderGrosor" (grosor de
+     líneas) hasta 15px, pensado para uso artístico, no solo
+     funcional. El tamaño es en píxeles de pantalla: no cambia
+     con la perspectiva.
 
   5) MAPAS DE FONDO
      "selectBasemap" tiene 5 estilos, todos gratis y sin API
      key: gris claro, gris oscuro, satelital y terreno (los 4
      de Esri, sin nombres de calles/localidades) y OpenStreetMap
      estándar (con todos los nombres). El switch "Blanco y
-     negro" es un filtro CSS aparte que se puede combinar con
-     cualquiera de los 5.
+     negro" desatura la capa activa y se puede combinar con
+     cualquiera de los 5. Para agregar otro fondo raster, sumá
+     una entrada al objeto BASEMAPS.
 
   6) CONEXIONES DESACTIVADAS
      Si apagás "Mostrar conexiones", el resto de los controles
      de esa sección se ven atenuados y no responden — es solo
      una clase CSS (.disabled-block) en el contenedor
      "#conexionesExtra".
+
+  7) PERSPECTIVA
+     Sección "Perspectiva": presets Plana / Inclinada / Rasante,
+     y sliders de inclinación (0–80°) y rotación (±180°).
+     Con el mouse: clic derecho (o Ctrl) + arrastrar. En pantallas
+     táctiles: dos dedos. Valores iniciales en "VISTA_INICIAL".
+
+  8) ALTURA DE LOS PUNTOS
+     "Altura" eleva TODOS los puntos la misma cantidad de metros
+     sobre el terreno (0 = pegados al suelo, como en la versión
+     plana). La línea vertical une cada punto con su ubicación
+     real en el suelo; se puede ocultar y cambiar color, grosor
+     y opacidad. Para que la altura dependa de un dato (por
+     ejemplo cantidad de carreras), reemplazá estado.alto por un
+     valor por universidad en la función "altoDe(u)".
+
+  9) CONEXIONES EN 3D
+     "Nivel de conexiones": en altura (unen los puntos elevados)
+     o en el suelo. "Arco de las conexiones" suma una panza
+     vertical entre punto y punto. Funciona con líneas curvas,
+     malla completa y los tres estilos de trazo.
+
+ 10) SOMBRA EN EL SUELO (experimental)
+     Mancha difusa bajo cada punto elevado, que se aplasta según
+     la inclinación. Es un recurso visual, no una sombra
+     proyectada real (ver notas de viabilidad en la respuesta).
   ============================================================
 -->
 
@@ -80,10 +117,8 @@
     background: var(--bg); font-family: var(--font); color: var(--ink); overflow:hidden;
   }
   #map{ position:absolute; inset:0; background: var(--bg); }
-  .leaflet-tile-pane{ transition: opacity 0.3s ease, filter 0.3s ease; }
-  body.mapa-gris .leaflet-tile-pane{ filter: grayscale(1) contrast(1.05); }
-  .leaflet-control-attribution{ background: rgba(240,239,234,0.7) !important; color: var(--ink-soft) !important; font-size: 10px !important; }
-  .leaflet-control-zoom{ display:none; }
+  .maplibregl-ctrl-attrib{ background: rgba(240,239,234,0.7) !important; color: var(--ink-soft) !important; font-size: 10px !important; font-family: var(--font); }
+  .maplibregl-ctrl-attrib a{ color: var(--ink-soft) !important; }
 
   body.ocultar-puntos .point-marker{ display:none; }
   body.ocultar-nombres .point-label{ display:none; }
@@ -109,6 +144,7 @@
 
   .panel h1{ font-size: 14.5px; font-weight: 600; margin: 0 0 4px 0; letter-spacing: -0.01em; }
   .panel p{ margin: 0 0 12px 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
+  .panel p.hint{ font-size: 10.5px; margin: 2px 0 6px 0; }
 
   .section-title{
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
@@ -151,7 +187,7 @@
   .slider-row-label span:last-child{ color: var(--ink-soft); }
   .slider-row input[type=range]{ width: 100%; accent-color: var(--ink); height: 4px; cursor: pointer; }
 
-  #conexionesExtra.disabled-block{ opacity: 0.35; pointer-events: none; }
+  .disabled-block{ opacity: 0.35; pointer-events: none; }
 
   details{ margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
   summary{ cursor:pointer; font-size: 11.5px; font-weight: 500; }
@@ -166,17 +202,28 @@
     border-radius:3px; padding:2px 6px; cursor:pointer; flex-shrink:0;
   }
 
+  /* Capa de dibujo 3D (líneas) y capa de puntos: viven dentro del contenedor del mapa */
+  #overlayCanvas{ position:absolute; left:0; top:0; z-index:1; pointer-events:none; }
+  .marker-item{ position:absolute; left:0; top:0; z-index:2; pointer-events:none; will-change: transform; }
   .marker-wrap{ display:flex; align-items:center; pointer-events: none; }
   .point-marker{ flex-shrink:0; position:relative; cursor:pointer; pointer-events:auto; }
   .point-label{ font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--ink); white-space: nowrap; margin-left: 6px; }
 
-  .leaflet-popup-content-wrapper{ background: var(--bg); color: var(--ink); border-radius: 3px; border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
-  .leaflet-popup-tip{ background: var(--bg); }
-  .leaflet-popup-content{ font-family: var(--font); font-size: 12.5px; margin: 9px 11px; }
-  .leaflet-popup-content b{ font-weight:600; }
-  .leaflet-popup-content .meta{ color: var(--ink-soft); font-size:11px; }
+  .popup{
+    position:absolute; left:0; top:0; z-index:5000; display:none; pointer-events:auto;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 3px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12); padding: 9px 11px;
+    font-family: var(--font); font-size: 12.5px; white-space: nowrap;
+  }
+  .popup::after{
+    content:''; position:absolute; left:50%; bottom:-6px; width:10px; height:10px;
+    background: var(--bg); border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+    transform: translateX(-50%) rotate(45deg);
+  }
+  .popup b{ font-weight:600; }
+  .popup .meta{ color: var(--ink-soft); font-size:11px; }
 
-  .credit{ position:absolute; bottom:14px; right:16px; z-index:1000; font-size: 10px; color: var(--ink-soft); }
+  .credit{ position:absolute; bottom:34px; right:16px; z-index:1000; font-size: 10px; color: var(--ink-soft); }
 </style>
 </head>
 <body>
@@ -187,6 +234,42 @@
 <div class="panel" id="panel">
   <h1>Universidades del conurbano</h1>
   <p>16 universidades nacionales del conurbano bonaerense.</p>
+
+  <div class="section-title">Perspectiva</div>
+  <div class="segmented">
+    <button id="btnVistaPlana">Plana</button>
+    <button id="btnVistaInclinada">Inclinada</button>
+    <button id="btnVistaRasante">Rasante</button>
+  </div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Inclinación</span><span id="valPitch">50°</span></div>
+    <input type="range" id="sliderPitch" min="0" max="80" step="1" value="50">
+  </div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Rotación</span><span id="valBearing">0°</span></div>
+    <input type="range" id="sliderBearing" min="-180" max="180" step="1" value="0">
+  </div>
+  <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
+  <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para inclinar y rotar. En pantallas táctiles, dos dedos.</p>
+
+  <div class="section-title">Altura de los puntos</div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Altura</span><span id="valAltura">5 km</span></div>
+    <input type="range" id="sliderAltura" min="0" max="20000" step="250" value="5000">
+  </div>
+  <div class="toggle-row"><span class="toggle-label">Mostrar línea vertical</span><div class="switch on" id="toggleStem"></div></div>
+  <div id="stemExtra">
+    <input type="color" id="colorStem" value="#211F1B">
+    <div class="slider-row">
+      <div class="slider-row-label"><span>Opacidad de la línea vertical</span><span id="valOpacidadStem">55%</span></div>
+      <input type="range" id="sliderOpacidadStem" min="5" max="100" value="55">
+    </div>
+    <div class="slider-row">
+      <div class="slider-row-label"><span>Grosor de la línea vertical</span><span id="valGrosorStem">1.2</span></div>
+      <input type="range" id="sliderGrosorStem" min="0.5" max="15" step="0.1" value="1.2">
+    </div>
+  </div>
+  <div class="toggle-row"><span class="toggle-label">Sombra en el suelo (experimental)</span><div class="switch" id="toggleSombra"></div></div>
 
   <div class="section-title">Color de puntos</div>
   <div class="segmented">
@@ -220,6 +303,14 @@
   <div class="section-title">Conexiones</div>
   <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
   <div id="conexionesExtra">
+    <select id="selectNivelConexion">
+      <option value="altura">Conectan los puntos en altura</option>
+      <option value="suelo">Conectan en el suelo</option>
+    </select>
+    <div class="slider-row">
+      <div class="slider-row-label"><span>Arco de las conexiones</span><span id="valArco">0 m</span></div>
+      <input type="range" id="sliderArco" min="0" max="10000" step="250" value="0">
+    </div>
     <div class="toggle-row"><span class="toggle-label">Conectar todas entre sí</span><div class="switch" id="toggleMesh"></div></div>
     <div class="toggle-row"><span class="toggle-label">Líneas curvas</span><div class="switch" id="toggleCurva"></div></div>
     <select id="selectEstiloLinea">
@@ -284,6 +375,7 @@
 
   const edgesCurados = [[6,12],[6,15],[4,6],[4,12],[12,13],[5,10],[0,8],[0,14],[2,11],[1,9],[10,11],[1,8],[6,7],[7,15],[4,7],[3,14],[5,11],[0,3],[0,9],[10,13],[2,12]];
   function todosLosPares(n){ const r=[]; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) r.push([i,j]); return r; }
+  const PARES_TODOS = todosLosPares(universidades.length);
 
   const coloresPorZona = { norte: "#2E7D6B", oeste: "#C97A2B", sur: "#5B4B8A" };
   const coloresIndividuales = {
@@ -327,6 +419,10 @@
   const colorOverride = {};
   const imagenOverride = {};
 
+  // Vista con la que abre el mapa (zoom de MapLibre = zoom de Leaflet − 1 con teselas de 256px)
+  const VISTA_INICIAL = { center: [-58.62, -34.66], zoom: 9, pitch: 50, bearing: 0 };
+  const PRESETS_VISTA = { btnVistaPlana: 0, btnVistaInclinada: 50, btnVistaRasante: 72 };
+
   let estado = {
     colorMode: "zona",
     formasVariadas: false,
@@ -334,13 +430,32 @@
     conBorde: true,
     colorBorde: "#F0EFEA",
     pointSize: 11,
+    // altura y línea vertical
+    alto: 5000,              // metros sobre el terreno
+    stemOn: true,
+    stemColor: "#211F1B",
+    stemOpacity: 0.55,
+    stemWeight: 1.2,
+    sombra: false,
+    // conexiones
+    edgesOn: true,
+    nivelConexion: "altura", // "altura" | "suelo"
+    arco: 0,                 // metros extra en el centro de cada conexión
     mesh: false,
     curva: false,
     lineColor: "#211F1B",
     lineOpacity: 0.22,
     lineWeight: 1.2,
-    lineDash: null,
+    lineEstilo: "solida",
+    // mapa base
+    baseOn: true,
+    basemap: "grisClaro",
+    baseBN: false,
+    baseOpacity: 0.8,
   };
+
+  // Altura de cada universidad. Hoy es la misma para todas; acá se puede enchufar un dato por universidad.
+  function altoDe(u){ return estado.alto; }
 
   const coloresAleatorios = {};
   function generarColoresAleatorios(){
@@ -380,72 +495,305 @@
     </div>`;
   }
 
-  // ---- Líneas curvas ----
+  // ---- Punto sobre una conexión (recta o curva), t entre 0 y 1. Devuelve [lng, lat] ----
   const CURVATURA = 0.18;
-  function puntosCurva(p1, p2, curvo){
-    if (!curvo) return [p1, p2];
-    const [lat1,lng1] = p1, [lat2,lng2] = p2;
-    const mx = (lat1+lat2)/2, my = (lng1+lng2)/2;
-    const dx = lng2-lng1, dy = lat2-lat1;
-    const cx = mx - dy*CURVATURA, cy = my + dx*CURVATURA;
-    const pts = []; const STEPS = 24;
-    for (let i=0;i<=STEPS;i++){
-      const t = i/STEPS;
-      const lat = (1-t)*(1-t)*lat1 + 2*(1-t)*t*cx + t*t*lat2;
-      const lng = (1-t)*(1-t)*lng1 + 2*(1-t)*t*cy + t*t*lng2;
-      pts.push([lat,lng]);
-    }
-    return pts;
+  function puntoEnConexion(A, B, curvo, t){
+    if (!curvo) return [A.lng + (B.lng - A.lng)*t, A.lat + (B.lat - A.lat)*t];
+    const mx = (A.lat + B.lat)/2, my = (A.lng + B.lng)/2;
+    const dx = B.lng - A.lng, dy = B.lat - A.lat;
+    const cx = mx - dy*CURVATURA, cy = my + dx*CURVATURA; // punto de control (lat, lng)
+    const lat = (1-t)*(1-t)*A.lat + 2*(1-t)*t*cx + t*t*B.lat;
+    const lng = (1-t)*(1-t)*A.lng + 2*(1-t)*t*cy + t*t*B.lng;
+    return [lng, lat];
   }
 
-  const map = L.map('map', { zoomControl: false, attributionControl: true, minZoom: 8, maxZoom: 13 }).setView([-34.66, -58.62], 10);
-
+  // ---- MAPA BASE (MapLibre GL, teselas raster sin API key) ----
   const ATTR_ESRI = 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
-  const basemaps = {
-    grisClaro: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 16 }),
-    grisOscuro: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 16 }),
-    satelital: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 18 }),
-    terreno: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}', { attribution: ATTR_ESRI, opacity: 0.8, maxZoom: 13 }),
-    osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', subdomains: 'abc', opacity: 0.8, maxZoom: 19 }),
+  const BASEMAPS = {
+    grisClaro:  { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'], maxzoom: 16, attribution: ATTR_ESRI },
+    grisOscuro: { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'],  maxzoom: 16, attribution: ATTR_ESRI },
+    satelital:  { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],               maxzoom: 18, attribution: ATTR_ESRI },
+    terreno:    { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'],          maxzoom: 13, attribution: ATTR_ESRI },
+    osm:        { tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],                                                                 maxzoom: 19, attribution: '&copy; OpenStreetMap' },
   };
-  let baseLayer = basemaps.grisClaro.addTo(map);
 
-  const edgesGroup = L.layerGroup().addTo(map);
-  const markersGroup = L.layerGroup().addTo(map);
+  function estiloInicial(){
+    const sources = {};
+    const layers = [{ id: 'fondo', type: 'background', paint: { 'background-color': '#F0EFEA' } }];
+    Object.entries(BASEMAPS).forEach(([id, b]) => {
+      sources[id] = { type: 'raster', tiles: b.tiles, tileSize: 256, maxzoom: b.maxzoom, attribution: b.attribution };
+      layers.push({
+        id, type: 'raster', source: id,
+        layout: { visibility: (id === estado.basemap && estado.baseOn) ? 'visible' : 'none' },
+        paint: { 'raster-opacity': estado.baseOpacity, 'raster-fade-duration': 150 },
+      });
+    });
+    return { version: 8, sources, layers };
+  }
 
-  function renderEdges(){
-    edgesGroup.clearLayers();
-    const pares = estado.mesh ? todosLosPares(universidades.length) : edgesCurados;
-    pares.forEach(([i,j]) => {
-      const p1 = [universidades[i].lat, universidades[i].lng];
-      const p2 = [universidades[j].lat, universidades[j].lng];
-      const latlngs = puntosCurva(p1, p2, estado.curva);
-      L.polyline(latlngs, { color: estado.lineColor, opacity: estado.lineOpacity, weight: estado.lineWeight, dashArray: estado.lineDash, smoothFactor: 1 }).addTo(edgesGroup);
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: estiloInicial(),
+    center: VISTA_INICIAL.center,
+    zoom: VISTA_INICIAL.zoom,
+    pitch: VISTA_INICIAL.pitch,
+    bearing: VISTA_INICIAL.bearing,
+    minZoom: 7, maxZoom: 12, maxPitch: 80,
+    renderWorldCopies: false,
+    attributionControl: { compact: true },
+  });
+
+  function aplicarBasemap(){
+    if (!map.isStyleLoaded() && !map.getLayer('grisClaro')) return;
+    Object.keys(BASEMAPS).forEach(id => {
+      map.setLayoutProperty(id, 'visibility', (id === estado.basemap && estado.baseOn) ? 'visible' : 'none');
+      map.setPaintProperty(id, 'raster-opacity', estado.baseOpacity);
+      map.setPaintProperty(id, 'raster-saturation', estado.baseBN ? -1 : 0);
+      map.setPaintProperty(id, 'raster-contrast', estado.baseBN ? 0.05 : 0);
     });
   }
 
+  // ---- CAPAS PROPIAS (dentro del contenedor del mapa, para que la rueda y el arrastre sigan funcionando encima) ----
+  const contenedor = map.getCanvasContainer();
+  const canvas = document.createElement('canvas');
+  canvas.id = 'overlayCanvas';
+  contenedor.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  const popupEl = document.createElement('div');
+  popupEl.className = 'popup';
+  contenedor.appendChild(popupEl);
+  let popupIdx = null;
+
+  // ---- PROYECCIÓN 3D ----
+  // MapLibre solo proyecta puntos a nivel del suelo (map.project). Para un punto elevado se reconstruye la
+  // posición de la cámara con datos públicos (centro, zoom, inclinación, rotación, campo visual) y se
+  // busca dónde cae en el suelo el rayo cámara → punto elevado: ese punto del suelo se ve en el mismo
+  // píxel que el punto en altura. Así se reutiliza la proyección exacta del motor.
+  const TILE_MAP = 512;
+  function posicionCamara(){
+    const c = map.getCenter();
+    const p = map.getPitch() * Math.PI/180;
+    const b = map.getBearing() * Math.PI/180;
+    const fov = map.getVerticalFieldOfView() * Math.PI/180;
+    const altoPx = map.getContainer().clientHeight;
+    const mundoPx = TILE_MAP * Math.pow(2, map.getZoom());
+    const d = 0.5 * altoPx / Math.tan(fov/2) / mundoPx;   // distancia cámara–centro en unidades mercator
+    const mc = maplibregl.MercatorCoordinate.fromLngLat(c);
+    return { x: mc.x - Math.sin(b)*d*Math.sin(p), y: mc.y + Math.cos(b)*d*Math.sin(p), z: d*Math.cos(p) };
+  }
+
+  // Devuelve {x, y, d2} en píxeles de pantalla, o null si el punto queda a la altura de la cámara o por encima.
+  function proyectar3D(lng, lat, alt, cam){
+    const mc = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
+    const dx = mc.x - cam.x, dy = mc.y - cam.y;
+    if (!alt) {
+      const s = map.project([lng, lat]);
+      return { x: s.x, y: s.y, d2: dx*dx + dy*dy + cam.z*cam.z };
+    }
+    const pz = alt * mc.meterInMercatorCoordinateUnits();
+    const dz = cam.z - pz;
+    if (dz <= cam.z*0.02) return null;
+    const t = cam.z / dz;
+    const q = new maplibregl.MercatorCoordinate(cam.x + dx*t, cam.y + dy*t, 0).toLngLat();
+    const s = map.project(q);
+    return { x: s.x, y: s.y, d2: dx*dx + dy*dy + dz*dz };
+  }
+
+  // ---- PUNTOS (HTML plano, tamaño en px de pantalla) ----
+  let marcadores = []; // {el, u, size, wrapH}
   function renderMarkers() {
-    markersGroup.clearLayers();
+    marcadores.forEach(m => m.el.remove());
+    marcadores = [];
     const size = estado.pointSize;
     const wrapH = Math.max(18, size + 6);
-    const anchorY = Math.round(wrapH / 2);
-    universidades.forEach(u => {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div class="marker-wrap" style="height:${wrapH}px;">${buildShapeHtml(u, size)}<span class="point-label">${u.sigla}</span></div>`,
-        iconSize: [130, wrapH],
-        iconAnchor: [Math.round(size / 2), anchorY],
+    universidades.forEach((u, idx) => {
+      const el = document.createElement('div');
+      el.className = 'marker-item';
+      el.innerHTML = `<div class="marker-wrap" style="height:${wrapH}px;">${buildShapeHtml(u, size)}<span class="point-label">${u.sigla}</span></div>`;
+      el.querySelector('.point-marker').addEventListener('click', function(ev){
+        ev.stopPropagation();
+        popupIdx = (popupIdx === idx) ? null : idx;
+        actualizarPopup();
+        dibujar();
       });
-      L.marker([u.lat, u.lng], { icon }).addTo(markersGroup)
-        .bindPopup(`<b>${u.sigla}</b><br>${u.name}<div class="meta">Zona ${u.zona} · ${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</div>`);
+      contenedor.appendChild(el);
+      marcadores.push({ el, u, size, wrapH });
     });
+    dibujar();
   }
-  renderEdges();
+
+  function actualizarPopup(){
+    if (popupIdx === null) { popupEl.style.display = 'none'; return; }
+    const u = universidades[popupIdx];
+    popupEl.innerHTML = `<b>${u.sigla}</b><br>${u.name}<div class="meta">Zona ${u.zona} · ${u.lat.toFixed(4)}, ${u.lng.toFixed(4)}</div>`;
+    popupEl.style.display = 'block';
+  }
+
+  const DASH = { solida: [], punteada: [2, 6], discontinua: [9, 7] };
+
+  // ---- DIBUJO (se ejecuta en cada cuadro del mapa y cada vez que cambia un control) ----
+  function dibujar(){
+    const mapDiv = map.getContainer();
+    const w = mapDiv.clientWidth, h = mapDiv.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(w*dpr) || canvas.height !== Math.round(h*dpr)) {
+      canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    const cam = posicionCamara();
+    const pitch = map.getPitch() * Math.PI/180;
+    const suelo = universidades.map(u => proyectar3D(u.lng, u.lat, 0, cam));
+    const aire  = universidades.map(u => proyectar3D(u.lng, u.lat, altoDe(u), cam));
+
+    // 1) sombra difusa bajo cada punto elevado
+    if (estado.sombra) {
+      const r = Math.max(6, estado.pointSize * 0.8);
+      universidades.forEach((u, i) => {
+        if (!altoDe(u) || !suelo[i]) return;
+        ctx.save();
+        ctx.translate(suelo[i].x, suelo[i].y);
+        ctx.scale(1, Math.max(0.15, Math.cos(pitch)));
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+        g.addColorStop(0, 'rgba(0,0,0,0.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    // 2) conexiones
+    if (estado.edgesOn) {
+      const pares = estado.mesh ? PARES_TODOS : edgesCurados;
+      const conArco = estado.arco > 0;
+      const pasos = (estado.curva || conArco) ? 24 : 1;
+      ctx.strokeStyle = estado.lineColor;
+      ctx.lineWidth = estado.lineWeight;
+      ctx.globalAlpha = estado.lineOpacity;
+      ctx.setLineDash(DASH[estado.lineEstilo] || []);
+      pares.forEach(([i, j]) => {
+        const A = universidades[i], B = universidades[j];
+        const base = (estado.nivelConexion === 'altura') ? (altoDe(A) + altoDe(B)) / 2 : 0;
+        ctx.beginPath();
+        let trazando = false;
+        for (let k = 0; k <= pasos; k++) {
+          const t = k / pasos;
+          const alt0 = (estado.nivelConexion === 'altura') ? altoDe(A) + (altoDe(B) - altoDe(A))*t : base;
+          const [lng, lat] = puntoEnConexion(A, B, estado.curva, t);
+          const p = proyectar3D(lng, lat, alt0 + estado.arco*Math.sin(Math.PI*t), cam);
+          if (!p) { trazando = false; continue; }
+          if (!trazando) { ctx.moveTo(p.x, p.y); trazando = true; } else { ctx.lineTo(p.x, p.y); }
+        }
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    // 3) líneas verticales suelo → punto
+    if (estado.stemOn) {
+      ctx.strokeStyle = estado.stemColor;
+      ctx.lineWidth = estado.stemWeight;
+      ctx.globalAlpha = estado.stemOpacity;
+      universidades.forEach((u, i) => {
+        if (!altoDe(u) || !suelo[i] || !aire[i]) return;
+        ctx.beginPath(); ctx.moveTo(suelo[i].x, suelo[i].y); ctx.lineTo(aire[i].x, aire[i].y); ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // 4) puntos + nombres: se mueven con la cámara; los más lejanos quedan detrás
+    const orden = universidades.map((_, i) => i).filter(i => aire[i]).sort((a, b) => aire[b].d2 - aire[a].d2);
+    marcadores.forEach((m, i) => { if (!aire[i]) m.el.style.display = 'none'; });
+    orden.forEach((i, rank) => {
+      const m = marcadores[i], p = aire[i];
+      if (!m) return;
+      m.el.style.display = 'block';
+      m.el.style.zIndex = 10 + rank;
+      m.el.style.transform = `translate3d(${(p.x - m.size/2).toFixed(1)}px, ${(p.y - m.wrapH/2).toFixed(1)}px, 0)`;
+    });
+
+    // 5) popup anclado al punto elevado
+    if (popupIdx !== null) {
+      const p = aire[popupIdx], m = marcadores[popupIdx];
+      if (!p || !m) { popupEl.style.display = 'none'; }
+      else {
+        popupEl.style.display = 'block';
+        popupEl.style.transform = `translate3d(${p.x.toFixed(1)}px, ${(p.y - m.size/2 - 8).toFixed(1)}px, 0) translate(-50%, -100%)`;
+      }
+    }
+  }
+
+  map.on('render', dibujar);
+  map.on('resize', dibujar);
+  map.on('click', function(e){
+    const t = e.originalEvent && e.originalEvent.target;
+    if (t && t.closest && t.closest('.point-marker')) return;
+    if (popupIdx !== null) { popupIdx = null; actualizarPopup(); dibujar(); }
+  });
+  map.on('load', function(){ aplicarBasemap(); });
+
   renderMarkers();
 
   // ---- Panel on/off ----
   document.getElementById('panelToggleBtn').addEventListener('click', function(){
     document.getElementById('panel').classList.toggle('oculto');
+  });
+
+  // ---- Perspectiva ----
+  const elPitch = document.getElementById('sliderPitch');
+  const elBearing = document.getElementById('sliderBearing');
+  function sincronizarVista(){
+    const p = map.getPitch(), b = map.getBearing();
+    elPitch.value = p;
+    elBearing.value = b;
+    document.getElementById('valPitch').textContent = Math.round(p) + '°';
+    document.getElementById('valBearing').textContent = Math.round(b) + '°';
+    Object.entries(PRESETS_VISTA).forEach(([id, val]) => {
+      document.getElementById(id).classList.toggle('active', Math.abs(p - val) < 1);
+    });
+  }
+  map.on('move', sincronizarVista);
+  sincronizarVista();
+  Object.entries(PRESETS_VISTA).forEach(([id, val]) => {
+    document.getElementById(id).addEventListener('click', function(){ map.easeTo({ pitch: val, duration: 700 }); });
+  });
+  elPitch.addEventListener('input', function(){ map.setPitch(parseFloat(this.value)); });
+  elBearing.addEventListener('input', function(){ map.setBearing(parseFloat(this.value)); });
+  document.getElementById('btnNorte').addEventListener('click', function(){ map.easeTo({ bearing: 0, duration: 700 }); });
+
+  // ---- Altura y línea vertical ----
+  function fmtMetros(m){
+    return m >= 1000 ? (m/1000).toFixed(2).replace(/\.?0+$/, '') + ' km' : m + ' m';
+  }
+  document.getElementById('sliderAltura').addEventListener('input', function(){
+    estado.alto = parseInt(this.value, 10);
+    document.getElementById('valAltura').textContent = fmtMetros(estado.alto);
+    dibujar();
+  });
+  document.getElementById('toggleStem').addEventListener('click', function(){
+    estado.stemOn = this.classList.toggle('on');
+    document.getElementById('stemExtra').classList.toggle('disabled-block', !estado.stemOn);
+    dibujar();
+  });
+  document.getElementById('colorStem').addEventListener('input', function(){ estado.stemColor = this.value; dibujar(); });
+  document.getElementById('sliderOpacidadStem').addEventListener('input', function(){
+    estado.stemOpacity = this.value / 100;
+    document.getElementById('valOpacidadStem').textContent = this.value + '%';
+    dibujar();
+  });
+  document.getElementById('sliderGrosorStem').addEventListener('input', function(){
+    estado.stemWeight = parseFloat(this.value);
+    document.getElementById('valGrosorStem').textContent = estado.stemWeight.toFixed(1);
+    dibujar();
+  });
+  document.getElementById('toggleSombra').addEventListener('click', function(){
+    estado.sombra = this.classList.toggle('on');
+    dibujar();
   });
 
   // ---- Color de puntos ----
@@ -503,54 +851,55 @@
 
   // ---- Conexiones ----
   document.getElementById('toggleEdges').addEventListener('click', function(){
-    const on = this.classList.toggle('on');
-    if (on) edgesGroup.addTo(map); else map.removeLayer(edgesGroup);
-    document.getElementById('conexionesExtra').classList.toggle('disabled-block', !on);
+    estado.edgesOn = this.classList.toggle('on');
+    document.getElementById('conexionesExtra').classList.toggle('disabled-block', !estado.edgesOn);
+    dibujar();
+  });
+  document.getElementById('selectNivelConexion').addEventListener('change', function(){
+    estado.nivelConexion = this.value; dibujar();
+  });
+  document.getElementById('sliderArco').addEventListener('input', function(){
+    estado.arco = parseInt(this.value, 10);
+    document.getElementById('valArco').textContent = fmtMetros(estado.arco);
+    dibujar();
   });
   document.getElementById('toggleMesh').addEventListener('click', function(){
-    estado.mesh = this.classList.toggle('on');
-    renderEdges();
+    estado.mesh = this.classList.toggle('on'); dibujar();
   });
   document.getElementById('toggleCurva').addEventListener('click', function(){
-    estado.curva = this.classList.toggle('on');
-    renderEdges();
+    estado.curva = this.classList.toggle('on'); dibujar();
   });
   document.getElementById('selectEstiloLinea').addEventListener('change', function(){
-    estado.lineDash = this.value === 'punteada' ? '2,6' : this.value === 'discontinua' ? '9,7' : null;
-    renderEdges();
+    estado.lineEstilo = this.value; dibujar();
   });
   document.getElementById('colorLinea').addEventListener('input', function(){
-    estado.lineColor = this.value; renderEdges();
+    estado.lineColor = this.value; dibujar();
   });
   document.getElementById('sliderOpacidadLinea').addEventListener('input', function(){
     estado.lineOpacity = this.value / 100;
     document.getElementById('valOpacidadLinea').textContent = this.value + '%';
-    renderEdges();
+    dibujar();
   });
   document.getElementById('sliderGrosor').addEventListener('input', function(){
     estado.lineWeight = parseFloat(this.value);
     document.getElementById('valGrosor').textContent = estado.lineWeight.toFixed(1);
-    renderEdges();
+    dibujar();
   });
 
   // ---- Mapa de fondo ----
   document.getElementById('toggleBase').addEventListener('click', function(){
-    const on = this.classList.toggle('on');
-    if (on) baseLayer.addTo(map); else map.removeLayer(baseLayer);
+    estado.baseOn = this.classList.toggle('on'); aplicarBasemap();
   });
   document.getElementById('selectBasemap').addEventListener('change', function(){
-    const onMapa = map.hasLayer(baseLayer);
-    map.removeLayer(baseLayer);
-    baseLayer = basemaps[this.value];
-    baseLayer.setOpacity(document.getElementById('sliderOpacidad').value / 100);
-    if (onMapa) baseLayer.addTo(map);
+    estado.basemap = this.value; aplicarBasemap();
   });
   document.getElementById('toggleBN').addEventListener('click', function(){
-    document.body.classList.toggle('mapa-gris', this.classList.toggle('on'));
+    estado.baseBN = this.classList.toggle('on'); aplicarBasemap();
   });
   document.getElementById('sliderOpacidad').addEventListener('input', function(){
-    baseLayer.setOpacity(this.value / 100);
+    estado.baseOpacity = this.value / 100;
     document.getElementById('valOpacidad').textContent = this.value + '%';
+    aplicarBasemap();
   });
 
   // ---- Personalización individual ----
