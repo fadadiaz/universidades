@@ -8,6 +8,8 @@
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
 
 <!--
   ============================================================
@@ -124,6 +126,45 @@
      asignacionFormas). Elegir una opción global borra los ajustes
      individuales de ese tipo (forma o color); el botón "Quitar
      todos los ajustes individuales" borra además las imágenes.
+ 13) CÁMARA Y NAVEGACIÓN
+     "Cámara a la altura de los puntos" sube la cámara a la altura
+     de los puntos: a 90° quedan todos sobre la línea del horizonte
+     y el zoom no los saca de la pantalla. El zoom es hacia el
+     centro de la pantalla (hay un interruptor para volver al zoom
+     hacia el cursor) y el centro del mapa no puede alejarse más de
+     ~40 km de las universidades (constante LIMITES).
+
+     Con la cámara elevada, MapLibre inclina pivotando sobre el suelo
+     y desplaza el mapa cientos de km, así que la inclinación con
+     mouse o dedos se desactiva (aplicarGestosInclinacion); se cambia
+     con el slider o los botones. Las animaciones de vista usan
+     animarVista (no map.easeTo) por la misma razón.
+
+ 14) AJUSTES PREESTABLECIDOS
+     Botones arriba del panel: Estándar, Unicon y Unicon con
+     nombres. Están definidos en PRESET_ESTANDAR / PRESET_UNICON /
+     PRESETS (al final del script). Cada uno es completo (incluye
+     vista, zoom y rotación) y se aplica moviendo los controles del
+     panel. Para crear otro, sumá una entrada a PRESETS y un botón
+     con data-preset en el HTML.
+
+ 15) NOMBRES
+     Fuente Roboto Condensed. "Nombres en vertical" los coloca sobre
+     el punto, leyéndose de abajo hacia arriba (CSS en
+     body.nombres-vertical).
+
+ 16) ROTACIÓN EN BUCLE Y GRABACIÓN
+     "Girar" rota el mapa a velocidad constante (duración de una
+     vuelta y sentido configurables; se detiene al tocar el mapa).
+     "Grabar una vuelta" oculta la interfaz, graba la pestaña con
+     getDisplayMedia + MediaRecorder durante exactamente una vuelta
+     (se corta un cuadro antes de cerrar, para que el empalme del
+     bucle sea continuo) y descarga el video (WebM en Chrome/Edge,
+     MP4 en Safari). Hay que elegir "Esta pestaña" en el aviso del
+     navegador. La tecla H oculta/muestra la interfaz (modo limpio),
+     sirve también para grabar con OBS o la grabación del sistema.
+     Con mapa de fondo visible, la atribución de Esri/OSM queda
+     oculta en el video: conviene sumarla en los créditos.
   ============================================================
 -->
 
@@ -245,7 +286,20 @@
   .marker-item{ position:absolute; left:0; top:0; z-index:2; pointer-events:none; will-change: transform; }
   .marker-wrap{ display:flex; align-items:center; pointer-events: none; }
   .point-marker{ flex-shrink:0; position:relative; cursor:pointer; pointer-events:auto; }
-  .point-label{ font-family: var(--font); font-size: 10.5px; font-weight: 500; color: var(--ink); white-space: nowrap; margin-left: 6px; }
+  .point-label{ font-family: 'Roboto Condensed', sans-serif; font-size: 12px; font-weight: 500; color: var(--ink); white-space: nowrap; margin-left: 6px; }
+  /* Nombres en vertical: el texto sube desde el punto (se lee de abajo hacia arriba) */
+  body.nombres-vertical .marker-wrap{ position: relative; }
+  body.nombres-vertical .point-label{
+    position: absolute; left: 50%; bottom: 100%; margin: 0 0 1px 0;
+    writing-mode: vertical-rl; transform: translateX(-50%) rotate(180deg);
+  }
+
+  .presets{ display:flex; flex-direction:column; gap:6px; margin-bottom: 4px; }
+  .presets button{
+    font-family: var(--font); font-size: 11.5px; text-align:left; padding: 7px 10px; cursor:pointer;
+    border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--ink);
+  }
+  .presets button:hover{ background: var(--ink); color: var(--bg); }
 
   .popup{
     position:absolute; left:0; top:0; z-index:5000; display:none; pointer-events:auto;
@@ -261,6 +315,16 @@
   .popup b{ font-weight:600; }
   .popup .meta{ color: var(--ink-soft); font-size:11px; }
 
+  /* Modo limpio: sin interfaz (para grabar o capturar la pantalla) */
+  body.limpio #panel, body.limpio #panelToggleBtn, body.limpio .credit,
+  body.limpio .maplibregl-ctrl-bottom-right, body.limpio .maplibregl-ctrl-bottom-left, body.limpio .popup{ display: none !important; }
+  body.grabando, body.grabando *{ cursor: none !important; }
+  .btn-accion{
+    font-family: var(--font); font-size: 11.5px; padding: 7px 10px; cursor:pointer; flex:1;
+    border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: var(--bg);
+  }
+  .btn-accion.secundario{ background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-accion.activo{ background: #B3261E; border-color: #B3261E; color: #fff; }
   .credit{ position:absolute; bottom:34px; right:16px; z-index:1000; font-size: 10px; color: var(--ink-soft); }
 </style>
 </head>
@@ -272,6 +336,13 @@
 <div class="panel" id="panel">
   <h1>Universidades del conurbano</h1>
   <p>16 universidades nacionales del conurbano bonaerense.</p>
+
+  <div class="section-title">Ajustes preestablecidos</div>
+  <div class="presets">
+    <button type="button" data-preset="estandar">Estándar</button>
+    <button type="button" data-preset="unicon">Unicon</button>
+    <button type="button" data-preset="uniconNombres">Unicon con nombres</button>
+  </div>
 
   <div class="section-title">Perspectiva</div>
   <div class="segmented">
@@ -301,7 +372,7 @@
     <div class="slider-row-label"><span>Altura de la cámara</span><span id="valCamAltura">5 km</span></div>
     <input type="range" id="sliderCamAltura" min="0" max="20000" step="250" value="5000">
   </div>
-  <p class="hint">Con la cámara a la altura de los puntos, a 85–90° todos quedan sobre la línea del horizonte y el zoom no los saca de la pantalla. Con la cámara a ras de suelo se los ve desde abajo.</p>
+  <p class="hint">Con la cámara a la altura de los puntos, a 85–90° todos quedan sobre la línea del horizonte y el zoom no los saca de la pantalla. Con la cámara a ras de suelo se los ve desde abajo. Con la cámara elevada, la inclinación se cambia con el slider o los botones (el mouse solo rota).</p>
 
   <div class="section-title">Navegación</div>
   <div class="fila-botones">
@@ -312,7 +383,23 @@
   <div class="toggle-row"><span class="toggle-label">Zoom hacia el cursor</span><div class="switch" id="toggleZoomCursor"></div></div>
   <div class="toggle-row" id="filaBloqueoPitch"><span class="toggle-label">Bloquear inclinación al rotar</span><div class="switch" id="toggleBloqueoPitch"></div></div>
   <p class="hint">Zoom centrado: la rueda acerca hacia el centro de la pantalla y no hacia donde apunta el cursor, así los puntos no se corren. El mapa no te deja alejarte más de ~40 km de las universidades; “Recentrar” te devuelve al centro.</p>
-  <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para inclinar y rotar. En pantallas táctiles, dos dedos.</p>
+  <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para rotar (e inclinar, si la cámara está a ras de suelo). En pantallas táctiles, dos dedos.</p>
+
+  <div class="section-title">Rotación en bucle</div>
+  <div class="slider-row">
+    <div class="slider-row-label"><span>Duración de una vuelta</span><span id="valDuracion">12 s</span></div>
+    <input type="range" id="sliderDuracion" min="3" max="60" step="1" value="12">
+  </div>
+  <select id="selectSentido">
+    <option value="horario">Sentido horario</option>
+    <option value="antihorario">Sentido antihorario</option>
+  </select>
+  <div class="fila-botones" style="flex-wrap:nowrap;">
+    <button type="button" class="btn-accion secundario" id="btnGirar">Girar</button>
+    <button type="button" class="btn-accion" id="btnGrabar">Grabar una vuelta</button>
+  </div>
+  <button type="button" class="btn-mini" id="btnLimpio">Ocultar interfaz (tecla H)</button>
+  <p class="hint" id="msgGrabar">Grabar pide compartir una pestaña: elegí “Esta pestaña”. La interfaz se oculta durante la grabación y el video se descarga solo al terminar. Esc cancela.</p>
 
   <div class="section-title">Altura de los puntos</div>
   <div class="slider-row">
@@ -374,6 +461,7 @@
   <input type="color" id="colorBorde" value="#F0EFEA">
   <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
   <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
+  <div class="toggle-row"><span class="toggle-label">Nombres en vertical</span><div class="switch" id="toggleNombresVertical"></div></div>
   <div class="slider-row">
     <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
     <input type="range" id="sliderTamano" min="6" max="80" value="11">
@@ -841,6 +929,34 @@
   });
 
   // ---- Perspectiva ----
+  // ---- Animación de la vista ----
+  // map.easeTo cambia la inclinación pivotando sobre el suelo; con la cámara elevada eso desplaza el centro
+  // durante la animación. Esta animación fija centro, zoom, inclinación y rotación en cada cuadro.
+  let animacionId = 0;
+  function animarVista(dest, ms){
+    if (typeof detenerRotacion === 'function') detenerRotacion();
+    const id = ++animacionId;
+    const c0 = map.getCenter(), z0 = map.getZoom(), p0 = map.getPitch(), b0 = map.getBearing();
+    const c1 = dest.center || [c0.lng, c0.lat];
+    const z1 = (dest.zoom !== undefined) ? dest.zoom : z0;
+    const p1 = (dest.pitch !== undefined) ? dest.pitch : p0;
+    const db = (dest.bearing !== undefined) ? ((dest.bearing - b0 + 540) % 360) - 180 : 0;
+    const t0 = performance.now();
+    function paso(t){
+      if (id !== animacionId) return;
+      const k = Math.min(1, (t - t0) / ms);
+      const e = k < 0.5 ? 4*k*k*k : 1 - Math.pow(-2*k + 2, 3) / 2;
+      map.jumpTo({
+        center: [c0.lng + (c1[0] - c0.lng)*e, c0.lat + (c1[1] - c0.lat)*e],
+        zoom: z0 + (z1 - z0)*e, pitch: p0 + (p1 - p0)*e, bearing: b0 + db*e,
+      });
+      if (k < 1) requestAnimationFrame(paso);
+    }
+    requestAnimationFrame(paso);
+  }
+  // cualquier gesto del usuario interrumpe la animación
+  ['mousedown', 'wheel', 'touchstart', 'keydown'].forEach(ev => map.getContainer().addEventListener(ev, function(){ animacionId++; }, { passive: true }));
+
   const elPitch = document.getElementById('sliderPitch');
   const elBearing = document.getElementById('sliderBearing');
   function sincronizarVista(){
@@ -856,11 +972,11 @@
   map.on('move', sincronizarVista);
   sincronizarVista();
   Object.entries(PRESETS_VISTA).forEach(([id, val]) => {
-    document.getElementById(id).addEventListener('click', function(){ map.easeTo({ pitch: val, duration: 700 }); });
+    document.getElementById(id).addEventListener('click', function(){ animarVista({ pitch: val }, 700); });
   });
-  elPitch.addEventListener('input', function(){ map.setPitch(parseFloat(this.value)); });
-  elBearing.addEventListener('input', function(){ map.setBearing(parseFloat(this.value)); });
-  document.getElementById('btnNorte').addEventListener('click', function(){ map.easeTo({ bearing: 0, duration: 700 }); });
+  elPitch.addEventListener('input', function(){ animacionId++; map.setPitch(parseFloat(this.value)); });
+  elBearing.addEventListener('input', function(){ animacionId++; map.setBearing(parseFloat(this.value)); });
+  document.getElementById('btnNorte').addEventListener('click', function(){ animarVista({ bearing: 0 }, 700); });
   // ---- Navegación con inclinación alta ----
   // Con el suelo casi de canto, los controles nativos de MapLibre dejan de ser confiables: el zoom y el
   // arrastre calculan sobre qué punto del suelo está el cursor, y a 90° ese punto no existe (el centro sale
@@ -953,6 +1069,7 @@
     fila.classList.toggle('disabled-block', estado.camSigue);
     document.getElementById('sliderCamAltura').value = h;
     document.getElementById('valCamAltura').textContent = fmtMetros(h);
+    aplicarGestosInclinacion();
   }
   document.getElementById('toggleCamSigue').addEventListener('click', function(){
     estado.camSigue = this.classList.toggle('on');
@@ -988,16 +1105,28 @@
   if (!manejadorPitch || typeof manejadorPitch.disable !== 'function') {
     document.getElementById('filaBloqueoPitch').style.display = 'none';
   }
+  // Con la cámara elevada, MapLibre inclina pivotando sobre el suelo y no sobre la cámara: el mapa se corre
+  // cientos de km y los puntos quedan lejos. Por eso, con la cámara elevada la inclinación con el mouse o
+  // los dedos se desactiva (se cambia con el slider o los botones). Rotar y hacer zoom no tienen el problema.
+  let bloqueoPitchUsuario = false;
+  function aplicarGestosInclinacion(){
+    const elevada = map.getCenterElevation() > 0.5;
+    const permitir = !elevada && !bloqueoPitchUsuario;
+    if (manejadorPitch && typeof manejadorPitch.enable === 'function') { permitir ? manejadorPitch.enable() : manejadorPitch.disable(); }
+    else if (elevada) { map.dragRotate.disable(); }
+    else { map.dragRotate.enable(); }
+    permitir ? map.touchPitch.enable() : map.touchPitch.disable();
+  }
   document.getElementById('toggleBloqueoPitch').addEventListener('click', function(){
-    const bloquear = this.classList.toggle('on');
-    if (bloquear) manejadorPitch.disable(); else manejadorPitch.enable();
+    bloqueoPitchUsuario = this.classList.toggle('on');
+    aplicarGestosInclinacion();
   });
 
   document.getElementById('btnRecentrar').addEventListener('click', function(){
-    map.easeTo({ center: VISTA_INICIAL.center, duration: 700 });
+    animarVista({ center: VISTA_INICIAL.center }, 700);
   });
   document.getElementById('btnVistaInicial').addEventListener('click', function(){
-    map.easeTo({ center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch: VISTA_INICIAL.pitch, bearing: VISTA_INICIAL.bearing, duration: 900 });
+    animarVista({ center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch: VISTA_INICIAL.pitch, bearing: VISTA_INICIAL.bearing }, 900);
   });
 
   // Límite de navegación: el centro no puede alejarse más de ~40 km de las universidades. Se aplica
@@ -1007,9 +1136,13 @@
     const lats = universidades.map(u => u.lat), lngs = universidades.map(u => u.lng), pad = 0.35;
     return { latMin: Math.min(...lats) - pad, latMax: Math.max(...lats) + pad, lngMin: Math.min(...lngs) - pad, lngMax: Math.max(...lngs) + pad };
   })();
-  let limitando = false;
+  let limitando = false, pitchLimite = map.getPitch();
   function limitarCentro(){
     if (limitando) return;
+    const p = map.getPitch();
+    const cambioPitch = Math.abs(p - pitchLimite) > 1e-6;
+    pitchLimite = p;
+    if (cambioPitch) return;   // al cambiar la inclinación el motor informa un centro transitorio
     const c = map.getCenter();
     const lat = Math.min(LIMITES.latMax, Math.max(LIMITES.latMin, c.lat));
     const lng = Math.min(LIMITES.lngMax, Math.max(LIMITES.lngMin, c.lng));
@@ -1150,6 +1283,10 @@
     const on = this.classList.toggle('on');
     document.body.classList.toggle('ocultar-nombres', !on);
   });
+  document.getElementById('toggleNombresVertical').addEventListener('click', function(){
+    const on = this.classList.toggle('on');
+    document.body.classList.toggle('nombres-vertical', on);
+  });
   document.getElementById('sliderTamano').addEventListener('input', function(){
     estado.pointSize = parseInt(this.value, 10);
     document.getElementById('valTamano').textContent = estado.pointSize + 'px';
@@ -1282,6 +1419,239 @@
       row.querySelector('.file-uni').value = '';
       renderMarkers();
     });
+  });
+
+  // ---- ROTACIÓN EN BUCLE Y GRABACIÓN ----
+  // "Girar" rota el mapa a velocidad constante hasta que lo detengas (o toques el mapa).
+  // "Grabar una vuelta" oculta la interfaz, graba la pestaña con la API del navegador (getDisplayMedia +
+  // MediaRecorder) durante exactamente una vuelta y descarga el video. Por eso hay que elegir "Esta
+  // pestaña" cuando el navegador pregunta. El video sale del tamaño de la ventana.
+  const elDuracion = document.getElementById('sliderDuracion');
+  const elSentido = document.getElementById('selectSentido');
+  const btnGirar = document.getElementById('btnGirar');
+  const btnGrabar = document.getElementById('btnGrabar');
+  const msgGrabar = document.getElementById('msgGrabar');
+  const MSG_GRABAR = msgGrabar.textContent;
+  let rotId = 0, rotActiva = false, grabacion = null;
+
+  // En MapLibre, aumentar el ángulo (bearing) hace girar el mapa en sentido antihorario sobre la pantalla.
+  function signoSentido(){ return elSentido.value === 'horario' ? -1 : 1; }
+  function segundosVuelta(){ return parseFloat(elDuracion.value); }
+  elDuracion.addEventListener('input', function(){ document.getElementById('valDuracion').textContent = this.value + ' s'; });
+
+  function actualizarBotonGirar(){
+    btnGirar.textContent = rotActiva ? 'Detener' : 'Girar';
+    btnGirar.classList.toggle('activo', rotActiva);
+    btnGirar.classList.toggle('secundario', !rotActiva);
+  }
+  function detenerRotacion(){ rotId++; rotActiva = false; actualizarBotonGirar(); }
+
+  // opciones.vuelta: si es true, gira exactamente una vuelta y llama a opciones.alTerminar().
+  function iniciarRotacion(opciones){
+    opciones = opciones || {};
+    animacionId++;                       // cancela animaciones de vista en curso
+    const id = ++rotId;
+    rotActiva = true; actualizarBotonGirar();
+    const b0 = map.getBearing();
+    let acumulado = 0, previo = null;
+    // en la grabación se corta un cuadro antes de cerrar la vuelta, así el empalme con el primer cuadro es continuo
+    const dur0 = segundosVuelta();
+    const corte = 360 - 360 / (dur0 * 60);
+    function paso(t){
+      if (id !== rotId) return;
+      if (previo === null) previo = t;
+      const dt = (t - previo) / 1000; previo = t;
+      acumulado += 360 * dt / (opciones.vuelta ? dur0 : segundosVuelta());   // la velocidad se puede cambiar en vivo
+      if (opciones.vuelta && acumulado >= corte) {
+        map.setBearing(b0 + signoSentido() * corte);
+        rotActiva = false; actualizarBotonGirar();
+        if (opciones.alTerminar) opciones.alTerminar();
+        return;
+      }
+      map.setBearing(b0 + signoSentido() * acumulado);
+      requestAnimationFrame(paso);
+    }
+    requestAnimationFrame(paso);
+  }
+
+  btnGirar.addEventListener('click', function(){ if (rotActiva) detenerRotacion(); else iniciarRotacion(); });
+  // tocar el mapa detiene el giro libre
+  ['mousedown', 'wheel', 'touchstart'].forEach(ev => map.getContainer().addEventListener(ev, function(){
+    if (rotActiva && !grabacion) detenerRotacion();
+  }, { passive: true }));
+
+  // ---- Modo limpio ----
+  function modoLimpio(on){ document.body.classList.toggle('limpio', on); }
+  document.getElementById('btnLimpio').addEventListener('click', function(){ modoLimpio(true); });
+  document.addEventListener('keydown', function(e){
+    const t = e.target && e.target.tagName;
+    if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+    if (e.key === 'h' || e.key === 'H') { modoLimpio(!document.body.classList.contains('limpio')); }
+    if (e.key === 'Escape') { if (grabacion) cancelarGrabacion('Grabación cancelada.'); else modoLimpio(false); }
+  });
+
+  // ---- Grabación ----
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+  function elegirFormato(){
+    const opciones = [['video/webm;codecs=vp9', 'webm'], ['video/webm;codecs=vp8', 'webm'], ['video/webm', 'webm'], ['video/mp4;codecs=avc1', 'mp4'], ['video/mp4', 'mp4']];
+    for (const [mime, ext] of opciones) { if (window.MediaRecorder && MediaRecorder.isTypeSupported(mime)) return { mime, ext }; }
+    return null;
+  }
+  function finalizarGrabacion(mensaje){
+    document.body.classList.remove('grabando');
+    modoLimpio(false);
+    msgGrabar.textContent = mensaje || MSG_GRABAR;
+    btnGrabar.disabled = false;
+    grabacion = null;
+  }
+  function cancelarGrabacion(mensaje){
+    const g = grabacion; if (!g) return;
+    g.cancelada = true;
+    detenerRotacion();
+    try { if (g.rec && g.rec.state !== 'inactive') g.rec.stop(); } catch (e) {}
+    g.stream.getTracks().forEach(t => t.stop());
+    map.setBearing(g.bearing0);
+    finalizarGrabacion(mensaje);
+  }
+  async function grabarVuelta(){
+    if (grabacion) return;
+    const formato = elegirFormato();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !formato) {
+      msgGrabar.textContent = 'Este navegador no permite grabar desde la página. Usá el botón Girar y la grabación de pantalla de tu sistema (OBS, Windows+G, QuickTime); la tecla H oculta la interfaz.';
+      return;
+    }
+    btnGrabar.disabled = true;
+    msgGrabar.textContent = 'Elegí “Esta pestaña” en el aviso del navegador…';
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 60 }, cursor: 'never', displaySurface: 'browser' }, audio: false,
+        preferCurrentTab: true, selfBrowserSurface: 'include', surfaceSwitching: 'exclude', monitorTypeSurfaces: 'exclude',
+      });
+    } catch (e) {
+      msgGrabar.textContent = 'No se pudo iniciar la grabación (' + (e && e.name ? e.name : 'error') + '). Probá de nuevo y aceptá el permiso.';
+      btnGrabar.disabled = false;
+      return;
+    }
+    const g = grabacion = { stream, bearing0: map.getBearing(), cancelada: false, rec: null };
+    stream.getVideoTracks()[0].addEventListener('ended', function(){ if (grabacion === g && !g.terminando) cancelarGrabacion('Se dejó de compartir la pestaña: grabación cancelada.'); });
+    detenerRotacion();
+    document.body.classList.add('grabando');
+    modoLimpio(true);
+    await esperar(1000);                 // deja que desaparezca el aviso del navegador y se pinte la vista limpia
+    if (g.cancelada) return;
+    const chunks = [];
+    const rec = g.rec = new MediaRecorder(stream, { mimeType: formato.mime, videoBitsPerSecond: 16000000 });
+    rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    const detenido = new Promise(res => { rec.onstop = res; });
+    const iniciado = new Promise(res => { rec.onstart = res; });
+    rec.start();
+    map.triggerRepaint();                // asegura que haya un primer cuadro para el grabador
+    await Promise.race([iniciado, esperar(500)]);   // espera a que el grabador esté listo, con tope de 0,5 s
+    if (g.cancelada) return;
+    iniciarRotacion({ vuelta: true, alTerminar: async function(){
+      g.terminando = true;
+      await esperar(120);               // último cuadro
+      rec.stop();
+      stream.getTracks().forEach(t => t.stop());
+      await detenido;
+      if (g.cancelada) return;
+      const blob = new Blob(chunks, { type: formato.mime.split(';')[0] });
+      const nombre = 'rotacion-' + segundosVuelta() + 's-' + elSentido.value + '.' + formato.ext;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      map.setBearing(g.bearing0);
+      finalizarGrabacion('Listo: se descargó ' + nombre + '.');
+    } });
+  }
+  btnGrabar.addEventListener('click', grabarVuelta);
+  // tocar el mapa durante la grabación la cancela
+  ['mousedown', 'wheel', 'touchstart'].forEach(ev => map.getContainer().addEventListener(ev, function(){
+    if (grabacion) cancelarGrabacion('Grabación cancelada: tocaste el mapa.');
+  }, { passive: true }));
+
+  // ---- AJUSTES PREESTABLECIDOS ----
+  // Cada preset es completo: parte de "estandar" y cambia solo lo que lo distingue, así el resultado no
+  // depende de cómo estaba el panel antes. Se aplican moviendo los mismos controles del panel, de modo que
+  // todo queda sincronizado. Para crear uno nuevo, sumá una entrada acá y un botón con data-preset.
+  const PRESET_ESTANDAR = {
+    // vista
+    center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch: VISTA_INICIAL.pitch, bearing: VISTA_INICIAL.bearing,
+    lenteNormal: true,
+    // altura
+    camSigue: true, alto: 5000, lineaVertical: true, colorStem: '#211F1B', opacidadStem: 55, grosorStem: 1.2, sombra: false,
+    // zonas, color y forma
+    zonasTodas: true, colorMode: 'zona', colorUnico: '#000000', forma: 'circulo',
+    borde: true, colorBorde: '#F0EFEA', puntos: true, nombres: true, nombresVertical: false, tamano: 11,
+    // conexiones
+    conexiones: true, nivelConexion: 'altura', arco: 0, mesh: false, curva: false,
+    estiloLinea: 'solida', colorLinea: '#211F1B', opacidadLinea: 22, grosorLinea: 1.2,
+    // mapa de fondo
+    base: true, basemap: 'grisClaro', bn: false, opacidadBase: 80,
+  };
+  const PRESET_UNICON = Object.assign({}, PRESET_ESTANDAR, {
+    pitch: 90, camSigue: true, lineaVertical: false,
+    colorMode: 'unico', colorUnico: '#000000', borde: false,
+    nombres: false, conexiones: false, base: false,
+  });
+  const PRESETS = {
+    estandar: PRESET_ESTANDAR,
+    unicon: PRESET_UNICON,
+    uniconNombres: Object.assign({}, PRESET_UNICON, { nombres: true }),
+  };
+
+  function fijarSwitch(id, on){ const el = document.getElementById(id); if (el.classList.contains('on') !== !!on) el.click(); }
+  function fijarRango(id, v){ const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('input')); }
+  function fijarSelect(id, v){ const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('change')); }
+  function fijarColor(id, v){ const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('input')); }
+
+  function aplicarPreset(clave){
+    const P = PRESETS[clave];
+    if (!P) return;
+    if (P.zonasTodas) document.getElementById('btnTodasZonas').click();
+    // forma y color globales (borran los ajustes individuales)
+    fijarSelect('selectFormaGlobal', P.forma);
+    document.getElementById(P.colorMode === 'unico' ? 'btnColorUnico' : 'btnColorZona').click();
+    if (P.colorMode === 'unico') fijarColor('colorUnico', P.colorUnico);
+    // puntos
+    fijarSwitch('toggleBorde', P.borde);
+    fijarColor('colorBorde', P.colorBorde);
+    fijarSwitch('togglePoints', P.puntos);
+    fijarSwitch('toggleLabels', P.nombres);
+    fijarSwitch('toggleNombresVertical', P.nombresVertical);
+    fijarRango('sliderTamano', P.tamano);
+    // conexiones
+    fijarSwitch('toggleEdges', P.conexiones);
+    fijarSelect('selectNivelConexion', P.nivelConexion);
+    fijarRango('sliderArco', P.arco);
+    fijarSwitch('toggleMesh', P.mesh);
+    fijarSwitch('toggleCurva', P.curva);
+    fijarSelect('selectEstiloLinea', P.estiloLinea);
+    fijarColor('colorLinea', P.colorLinea);
+    fijarRango('sliderOpacidadLinea', P.opacidadLinea);
+    fijarRango('sliderGrosor', P.grosorLinea);
+    // mapa de fondo
+    fijarSwitch('toggleBase', P.base);
+    fijarSelect('selectBasemap', P.basemap);
+    fijarSwitch('toggleBN', P.bn);
+    fijarRango('sliderOpacidad', P.opacidadBase);
+    // altura, línea vertical y sombra
+    fijarRango('sliderAltura', P.alto);
+    fijarSwitch('toggleStem', P.lineaVertical);
+    fijarColor('colorStem', P.colorStem);
+    fijarRango('sliderOpacidadStem', P.opacidadStem);
+    fijarRango('sliderGrosorStem', P.grosorStem);
+    fijarSwitch('toggleSombra', P.sombra);
+    // cámara y lente
+    fijarSwitch('toggleCamSigue', P.camSigue);
+    if (P.lenteNormal) document.getElementById('btnLenteNormal').click();
+    // la vista va al final: los cambios de arriba (altura de la cámara, lente) cancelarían una animación en curso
+    animarVista({ center: P.center, zoom: P.zoom, pitch: P.pitch, bearing: P.bearing }, 900);
+  }
+  document.querySelectorAll('.presets button').forEach(btn => {
+    btn.addEventListener('click', function(){ aplicarPreset(this.dataset.preset); });
   });
 </script>
 
