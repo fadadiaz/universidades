@@ -141,17 +141,20 @@
      animarVista (no map.easeTo) por la misma razón.
 
  14) AJUSTES PREESTABLECIDOS
-     Botones arriba del panel: Estándar, Unicon y Unicon con
+     Desplegable fijo arriba del panel: Estándar, Unicon y Unicon con
      nombres. Están definidos en PRESET_ESTANDAR / PRESET_UNICON /
-     PRESETS (al final del script). Cada uno es completo (incluye
-     vista, zoom y rotación) y se aplica moviendo los controles del
-     panel. Para crear otro, sumá una entrada a PRESETS y un botón
-     con data-preset en el HTML.
+     PRESETS (al final del script). Cada uno es completo (vista,
+     zoom, rotación, colores de zona, color de fondo, tamaño de texto,
+     etc.) y se aplica moviendo los controles del panel. El
+     desplegable pasa a "Personalizado" cuando movés cualquier otro
+     control. Para crear otro, sumá una entrada a PRESETS y una
+     <option> en #selectPreset.
 
  15) NOMBRES
      Fuente Roboto Condensed. "Nombres en vertical" los coloca sobre
      el punto, leyéndose de abajo hacia arriba (CSS en
-     body.nombres-vertical).
+     body.nombres-vertical). "Tamaño del texto" (8–40 px) cambia la
+     variable CSS --tam-texto.
 
  16) ROTACIÓN EN BUCLE Y GRABACIÓN
      "Girar" rota el mapa a velocidad constante (duración de una
@@ -165,27 +168,44 @@
      sirve también para grabar con OBS o la grabación del sistema.
      Con mapa de fondo visible, la atribución de Esri/OSM queda
      oculta en el video: conviene sumarla en los créditos.
+
+ 17) PANEL EN ACORDEONES
+     Cada grupo es un <details class="grupo">; al abrir uno se cierran
+     los demás (ver "ACORDEONES" en el script). Para agregar un
+     control, ponelo dentro del .grupo-body que corresponda.
+
+ 18) PALETA RÁPIDA DE COLORES
+     Al tocar cualquier <input type="color"> aparece una paleta con
+     los colores de la constante PALETA (más "Otro color…" para el
+     selector normal del navegador). Funciona también con los
+     selectores que se crean por código.
+
+ 19) COLOR DE FONDO
+     "Fondo y mapa" > "Color de fondo" cambia el fondo del mapa (se ve
+     donde no hay mapa base). Los ajustes Unicon lo ponen en blanco
+     puro (#FFFFFF); el Estándar usa #F0EFEA.
   ============================================================
 -->
 
 <style>
   :root{
     --bg: #F0EFEA;
+    --fondo-mapa: #F0EFEA;
     --ink: #211F1B;
     --ink-soft: rgba(33,31,27,0.55);
     --line: rgba(33,31,27,0.22);
     --panel-bg: rgba(240,239,234,0.94);
-    --zona-norte: #2E7D6B;
-    --zona-oeste: #C97A2B;
-    --zona-sur: #5B4B8A;
+    --zona-norte: #F7A348;
+    --zona-oeste: #90ADF1;
+    --zona-sur: #CCB2FF;
     --font: 'IBM Plex Sans', sans-serif;
   }
   *{ box-sizing: border-box; }
   html, body{
     margin:0; padding:0; height:100%; width:100%;
-    background: var(--bg); font-family: var(--font); color: var(--ink); overflow:hidden;
+    background: var(--fondo-mapa); font-family: var(--font); color: var(--ink); overflow:hidden;
   }
-  #map{ position:absolute; inset:0; background: var(--bg); }
+  #map{ position:absolute; inset:0; background: var(--fondo-mapa); }
   .maplibregl-ctrl-attrib{ background: rgba(240,239,234,0.7) !important; color: var(--ink-soft) !important; font-size: 10px !important; font-family: var(--font); }
   .maplibregl-ctrl-attrib a{ color: var(--ink-soft) !important; }
 
@@ -203,13 +223,18 @@
   .panel{
     position:absolute; top:20px; left:20px; z-index:1000;
     background: var(--panel-bg); border: 1px solid var(--line); border-radius: 4px;
-    padding: 16px 18px; width: 270px; max-height: calc(100vh - 40px);
-    overflow-y: auto; backdrop-filter: blur(6px);
+    width: 284px; max-height: calc(100vh - 40px);
+    display:flex; flex-direction:column; overflow:hidden; backdrop-filter: blur(6px);
     transition: opacity 0.2s ease, transform 0.2s ease;
   }
   .panel.oculto{ opacity:0; pointer-events:none; transform: translateX(-12px); }
-  .panel::-webkit-scrollbar{ width:6px; }
-  .panel::-webkit-scrollbar-thumb{ background: var(--line); border-radius: 3px; }
+  .panel-head{ padding: 14px 18px 12px; border-bottom: 1px solid var(--line); flex-shrink:0; }
+  .panel-head p{ margin: 0 0 10px 0; }
+  .head-label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin-bottom:6px; }
+  .panel-head select{ margin-bottom:0; }
+  .panel-body{ overflow-y:auto; padding: 0 18px 8px; flex:1 1 auto; min-height:0; }
+  .panel-body::-webkit-scrollbar{ width:6px; }
+  .panel-body::-webkit-scrollbar-thumb{ background: var(--line); border-radius: 3px; }
 
   .panel h1{ font-size: 14.5px; font-weight: 600; margin: 0 0 4px 0; letter-spacing: -0.01em; }
   .panel p{ margin: 0 0 12px 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-soft); }
@@ -219,7 +244,7 @@
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--ink-soft); margin: 14px 0 8px 0;
   }
-  .section-title:first-of-type{ margin-top:0; }
+  .grupo-body > .section-title:first-child{ margin-top:2px; }
 
   .legend{ display:flex; flex-direction:column; gap:6px; margin-bottom: 6px; }
   .legend-item{ display:flex; align-items:center; gap:8px; font-size:11.5px; }
@@ -268,8 +293,16 @@
   .zona-row.zona-off .zona-nombre{ opacity:0.45; }
   .fila-botones{ display:flex; gap:6px; flex-wrap:wrap; margin: 4px 0 8px 0; }
 
-  details{ margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
-  summary{ cursor:pointer; font-size: 11.5px; font-weight: 500; }
+  details.grupo{ border-bottom: 1px solid var(--line); }
+  details.grupo > summary{
+    list-style:none; cursor:pointer; padding: 11px 0; font-size: 12.5px; font-weight: 600;
+    display:flex; align-items:center; justify-content:space-between; user-select:none;
+  }
+  details.grupo > summary::-webkit-details-marker{ display:none; }
+  details.grupo > summary::after{ content:'+'; font-weight:400; font-size:17px; line-height:1; color: var(--ink-soft); }
+  details.grupo[open] > summary::after{ content:'\2013'; }
+  details.grupo > summary:hover{ color: #000; }
+  .grupo-body{ padding: 0 0 12px 0; }
   .fila-uni{ display:grid; grid-template-columns: 44px 1fr 34px; gap:6px; align-items:center; margin-bottom:6px; }
   .fila-uni span{ font-size: 10.5px; color: var(--ink-soft); }
   .fila-uni select{ margin-bottom:0; font-size:10px; padding:3px 4px; }
@@ -286,7 +319,7 @@
   .marker-item{ position:absolute; left:0; top:0; z-index:2; pointer-events:none; will-change: transform; }
   .marker-wrap{ display:flex; align-items:center; pointer-events: none; }
   .point-marker{ flex-shrink:0; position:relative; cursor:pointer; pointer-events:auto; }
-  .point-label{ font-family: 'Roboto Condensed', sans-serif; font-size: 12px; font-weight: 500; color: var(--ink); white-space: nowrap; margin-left: 6px; }
+  .point-label{ font-family: 'Roboto Condensed', sans-serif; font-size: var(--tam-texto, 12px); font-weight: 500; color: var(--ink); white-space: nowrap; margin-left: 6px; }
   /* Nombres en vertical: el texto sube desde el punto (se lee de abajo hacia arriba) */
   body.nombres-vertical .marker-wrap{ position: relative; }
   body.nombres-vertical .point-label{
@@ -294,12 +327,20 @@
     writing-mode: vertical-rl; transform: translateX(-50%) rotate(180deg);
   }
 
-  .presets{ display:flex; flex-direction:column; gap:6px; margin-bottom: 4px; }
-  .presets button{
-    font-family: var(--font); font-size: 11.5px; text-align:left; padding: 7px 10px; cursor:pointer;
-    border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--ink);
+  /* Paleta rápida de colores: aparece al tocar cualquier selector de color */
+  #paletaPop{
+    position:fixed; z-index:6000; display:none; width:222px;
+    background: var(--bg); border:1px solid var(--line); border-radius:6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.16); padding:8px;
   }
-  .presets button:hover{ background: var(--ink); color: var(--bg); }
+  #paletaPop .fila-sw{ display:flex; gap:6px; }
+  #paletaPop .sw{ width:24px; height:24px; border-radius:5px; border:1px solid rgba(33,31,27,0.35); cursor:pointer; padding:0; }
+  #paletaPop .sw.sel{ outline:2px solid var(--ink); outline-offset:1px; }
+  #paletaPop .otro{
+    margin-top:8px; width:100%; font-family:var(--font); font-size:11px; padding:5px;
+    border:1px solid var(--line); border-radius:4px; background:transparent; color:var(--ink); cursor:pointer;
+  }
+  #paletaPop .otro:hover{ background: var(--ink); color: var(--bg); }
 
   .popup{
     position:absolute; left:0; top:0; z-index:5000; display:none; pointer-events:auto;
@@ -317,7 +358,7 @@
 
   /* Modo limpio: sin interfaz (para grabar o capturar la pantalla) */
   body.limpio #panel, body.limpio #panelToggleBtn, body.limpio .credit,
-  body.limpio .maplibregl-ctrl-bottom-right, body.limpio .maplibregl-ctrl-bottom-left, body.limpio .popup{ display: none !important; }
+  body.limpio .maplibregl-ctrl-bottom-right, body.limpio .maplibregl-ctrl-bottom-left, body.limpio .popup, body.limpio #paletaPop{ display: none !important; }
   body.grabando, body.grabando *{ cursor: none !important; }
   .btn-accion{
     font-family: var(--font); font-size: 11.5px; padding: 7px 10px; cursor:pointer; flex:1;
@@ -334,187 +375,240 @@
 <div id="panelToggleBtn" title="Mostrar/ocultar panel">☰</div>
 
 <div class="panel" id="panel">
-  <h1>Universidades del conurbano</h1>
-  <p>16 universidades nacionales del conurbano bonaerense.</p>
-
-  <div class="section-title">Ajustes preestablecidos</div>
-  <div class="presets">
-    <button type="button" data-preset="estandar">Estándar</button>
-    <button type="button" data-preset="unicon">Unicon</button>
-    <button type="button" data-preset="uniconNombres">Unicon con nombres</button>
-  </div>
-
-  <div class="section-title">Perspectiva</div>
-  <div class="segmented">
-    <button id="btnVistaPlana">Plana</button>
-    <button id="btnVistaInclinada">Inclinada</button>
-    <button id="btnVistaRasante">Rasante</button>
-    <button id="btnVistaLateral">90°</button>
-  </div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Inclinación</span><span id="valPitch">50°</span></div>
-    <input type="range" id="sliderPitch" min="0" max="90" step="1" value="50">
-  </div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Rotación</span><span id="valBearing">0°</span></div>
-    <input type="range" id="sliderBearing" min="-180" max="180" step="1" value="0">
-  </div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Lente (perspectiva)</span><span id="valLente">37°</span></div>
-    <input type="range" id="sliderLente" min="2" max="60" step="1" value="37">
-  </div>
-  <div class="fila-botones">
-    <button type="button" class="btn-mini" id="btnLenteNormal">Lente normal</button>
-    <button type="button" class="btn-mini" id="btnLenteOrtogonal">Ortogonal</button>
-  </div>
-  <div class="toggle-row"><span class="toggle-label">Cámara a la altura de los puntos</span><div class="switch on" id="toggleCamSigue"></div></div>
-  <div class="slider-row" id="filaCamAltura">
-    <div class="slider-row-label"><span>Altura de la cámara</span><span id="valCamAltura">5 km</span></div>
-    <input type="range" id="sliderCamAltura" min="0" max="20000" step="250" value="5000">
-  </div>
-  <p class="hint">Con la cámara a la altura de los puntos, a 85–90° todos quedan sobre la línea del horizonte y el zoom no los saca de la pantalla. Con la cámara a ras de suelo se los ve desde abajo. Con la cámara elevada, la inclinación se cambia con el slider o los botones (el mouse solo rota).</p>
-
-  <div class="section-title">Navegación</div>
-  <div class="fila-botones">
-    <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
-    <button type="button" class="btn-mini" id="btnRecentrar">Recentrar</button>
-    <button type="button" class="btn-mini" id="btnVistaInicial">Vista inicial</button>
-  </div>
-  <div class="toggle-row"><span class="toggle-label">Zoom hacia el cursor</span><div class="switch" id="toggleZoomCursor"></div></div>
-  <div class="toggle-row" id="filaBloqueoPitch"><span class="toggle-label">Bloquear inclinación al rotar</span><div class="switch" id="toggleBloqueoPitch"></div></div>
-  <p class="hint">Zoom centrado: la rueda acerca hacia el centro de la pantalla y no hacia donde apunta el cursor, así los puntos no se corren. El mapa no te deja alejarte más de ~40 km de las universidades; “Recentrar” te devuelve al centro.</p>
-  <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para rotar (e inclinar, si la cámara está a ras de suelo). En pantallas táctiles, dos dedos.</p>
-
-  <div class="section-title">Rotación en bucle</div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Duración de una vuelta</span><span id="valDuracion">12 s</span></div>
-    <input type="range" id="sliderDuracion" min="3" max="60" step="1" value="12">
-  </div>
-  <select id="selectSentido">
-    <option value="horario">Sentido horario</option>
-    <option value="antihorario">Sentido antihorario</option>
-  </select>
-  <div class="fila-botones" style="flex-wrap:nowrap;">
-    <button type="button" class="btn-accion secundario" id="btnGirar">Girar</button>
-    <button type="button" class="btn-accion" id="btnGrabar">Grabar una vuelta</button>
-  </div>
-  <button type="button" class="btn-mini" id="btnLimpio">Ocultar interfaz (tecla H)</button>
-  <p class="hint" id="msgGrabar">Grabar pide compartir una pestaña: elegí “Esta pestaña”. La interfaz se oculta durante la grabación y el video se descarga solo al terminar. Esc cancela.</p>
-
-  <div class="section-title">Altura de los puntos</div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Altura</span><span id="valAltura">5 km</span></div>
-    <input type="range" id="sliderAltura" min="0" max="20000" step="250" value="5000">
-  </div>
-  <div class="toggle-row"><span class="toggle-label">Mostrar línea vertical</span><div class="switch on" id="toggleStem"></div></div>
-  <div id="stemExtra">
-    <input type="color" id="colorStem" value="#211F1B">
-    <div class="slider-row">
-      <div class="slider-row-label"><span>Opacidad de la línea vertical</span><span id="valOpacidadStem">55%</span></div>
-      <input type="range" id="sliderOpacidadStem" min="5" max="100" value="55">
-    </div>
-    <div class="slider-row">
-      <div class="slider-row-label"><span>Grosor de la línea vertical</span><span id="valGrosorStem">1.2</span></div>
-      <input type="range" id="sliderGrosorStem" min="0.5" max="15" step="0.1" value="1.2">
-    </div>
-  </div>
-  <div class="toggle-row"><span class="toggle-label">Sombra en el suelo (experimental)</span><div class="switch" id="toggleSombra"></div></div>
-
-  <div class="section-title">Zonas</div>
-  <div id="zonasLista">
-    <div class="zona-row" data-zona="norte"><input type="color" class="zona-color" data-zona="norte" value="#2E7D6B" title="Color de la zona"><span class="zona-nombre">Zona Norte<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="norte">solo</button><div class="switch on zona-switch" data-zona="norte"></div></div>
-    <div class="zona-row" data-zona="oeste"><input type="color" class="zona-color" data-zona="oeste" value="#C97A2B" title="Color de la zona"><span class="zona-nombre">Zona Oeste<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="oeste">solo</button><div class="switch on zona-switch" data-zona="oeste"></div></div>
-    <div class="zona-row" data-zona="sur"><input type="color" class="zona-color" data-zona="sur" value="#5B4B8A" title="Color de la zona"><span class="zona-nombre">Zona Sur<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="sur">solo</button><div class="switch on zona-switch" data-zona="sur"></div></div>
-  </div>
-  <div class="fila-botones"><button type="button" class="btn-mini" id="btnTodasZonas">Mostrar todas</button></div>
-  <p class="hint">El interruptor muestra u oculta la zona (puntos, nombres, líneas y conexiones). El círculo de color define el color de la zona en el modo "Por zona".</p>
-
-  <div class="section-title">Color de puntos</div>
-  <div class="segmented">
-    <button id="btnColorZona" class="active">Por zona</button>
-    <button id="btnColorIndividual">Individual</button>
-    <button id="btnColorUnico">Uno solo</button>
-  </div>
-  <input type="color" id="colorUnico" value="#211F1B" style="display:none;">
-  <div class="toggle-row" id="filaAleatorio" style="display:none;">
-    <span class="toggle-label">Colores aleatorios</span>
-    <div style="display:flex;align-items:center;gap:8px;">
-      <button type="button" class="btn-mini" id="btnRemezclar" style="display:none;">🔀 Remezclar</button>
-      <div class="switch" id="toggleAleatorio"></div>
-    </div>
-  </div>
-
-  <div class="section-title">Forma de puntos</div>
-  <select id="selectFormaGlobal">
-    <option value="circulo">Todos círculos</option>
-    <option value="cuadrado">Todos cuadrados</option>
-    <option value="rombo">Todos rombos</option>
-    <option value="hexagono">Todos hexágonos</option>
-    <option value="estrella">Todas estrellas</option>
-    <option value="trefoil">Todos tréboles (3)</option>
-    <option value="cuatrifolio">Todos tréboles (4)</option>
-    <option value="astroide">Todos astroides</option>
-    <option value="variadas">Variadas (una distinta por universidad)</option>
-  </select>
-  <p class="hint">Elegir una forma o un color global reemplaza los ajustes individuales de ese tipo.</p>
-  <div class="toggle-row"><span class="toggle-label">Mostrar borde</span><div class="switch on" id="toggleBorde"></div></div>
-  <input type="color" id="colorBorde" value="#F0EFEA">
-  <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
-  <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
-  <div class="toggle-row"><span class="toggle-label">Nombres en vertical</span><div class="switch" id="toggleNombresVertical"></div></div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
-    <input type="range" id="sliderTamano" min="6" max="80" value="11">
-  </div>
-
-  <div class="section-title">Conexiones</div>
-  <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
-  <div id="conexionesExtra">
-    <select id="selectNivelConexion">
-      <option value="altura">Conectan los puntos en altura</option>
-      <option value="suelo">Conectan en el suelo</option>
+  <div class="panel-head">
+    <h1>Universidades del conurbano</h1>
+    <p>16 universidades nacionales del conurbano bonaerense.</p>
+    <label class="head-label" for="selectPreset">Ajustes preestablecidos</label>
+    <select id="selectPreset">
+      <option value="estandar" selected>Estándar</option>
+      <option value="unicon">Unicon</option>
+      <option value="uniconNombres">Unicon con nombres</option>
+      <option value="personalizado" disabled>Personalizado</option>
     </select>
-    <div class="slider-row">
-      <div class="slider-row-label"><span>Arco de las conexiones</span><span id="valArco">0 m</span></div>
-      <input type="range" id="sliderArco" min="0" max="10000" step="250" value="0">
-    </div>
-    <div class="toggle-row"><span class="toggle-label">Conectar todas entre sí</span><div class="switch" id="toggleMesh"></div></div>
-    <div class="toggle-row"><span class="toggle-label">Líneas curvas</span><div class="switch" id="toggleCurva"></div></div>
-    <select id="selectEstiloLinea">
-      <option value="solida">Línea sólida</option>
-      <option value="punteada">Punteada</option>
-      <option value="discontinua">Discontinua</option>
-    </select>
-    <input type="color" id="colorLinea" value="#211F1B">
-    <div class="slider-row">
-      <div class="slider-row-label"><span>Opacidad de líneas</span><span id="valOpacidadLinea">22%</span></div>
-      <input type="range" id="sliderOpacidadLinea" min="5" max="100" value="22">
-    </div>
-    <div class="slider-row">
-      <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
-      <input type="range" id="sliderGrosor" min="0.5" max="15" step="0.1" value="1.2">
-    </div>
   </div>
 
-  <div class="section-title">Mapa de fondo</div>
-  <div class="toggle-row"><span class="toggle-label">Mostrar mapa base</span><div class="switch on" id="toggleBase"></div></div>
-  <select id="selectBasemap">
-    <option value="grisClaro">Gris claro (sin texto)</option>
-    <option value="grisOscuro">Gris oscuro (sin texto)</option>
-    <option value="satelital">Satelital (sin texto)</option>
-    <option value="terreno">Terreno (sin texto)</option>
-    <option value="osm">Calles y nombres (OSM)</option>
-  </select>
-  <div class="toggle-row"><span class="toggle-label">Blanco y negro</span><div class="switch" id="toggleBN"></div></div>
-  <div class="slider-row">
-    <div class="slider-row-label"><span>Opacidad del mapa</span><span id="valOpacidad">80%</span></div>
-    <input type="range" id="sliderOpacidad" min="10" max="100" value="80">
-  </div>
+  <div class="panel-body">
 
-  <details>
-    <summary>Personalizar cada universidad</summary>
-    <div id="personalizarLista" style="margin-top:10px;"></div>
+  <details class="grupo" open>
+    <summary>Vista y cámara</summary>
+    <div class="grupo-body">
+      <div class="section-title">Perspectiva</div>
+      <div class="segmented">
+        <button id="btnVistaPlana">Plana</button>
+        <button id="btnVistaInclinada">Inclinada</button>
+        <button id="btnVistaRasante">Rasante</button>
+        <button id="btnVistaLateral">90°</button>
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Inclinación</span><span id="valPitch">50°</span></div>
+        <input type="range" id="sliderPitch" min="0" max="90" step="1" value="50">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Rotación</span><span id="valBearing">0°</span></div>
+        <input type="range" id="sliderBearing" min="-180" max="180" step="1" value="0">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Lente (perspectiva)</span><span id="valLente">37°</span></div>
+        <input type="range" id="sliderLente" min="2" max="60" step="1" value="37">
+      </div>
+      <div class="fila-botones">
+        <button type="button" class="btn-mini" id="btnLenteNormal">Lente normal</button>
+        <button type="button" class="btn-mini" id="btnLenteOrtogonal">Ortogonal</button>
+      </div>
+      <div class="toggle-row"><span class="toggle-label">Cámara a la altura de los puntos</span><div class="switch on" id="toggleCamSigue"></div></div>
+      <div class="slider-row" id="filaCamAltura">
+        <div class="slider-row-label"><span>Altura de la cámara</span><span id="valCamAltura">5 km</span></div>
+        <input type="range" id="sliderCamAltura" min="0" max="20000" step="250" value="5000">
+      </div>
+      <p class="hint">Con la cámara a la altura de los puntos, a 85–90° todos quedan sobre la línea del horizonte y el zoom no los saca de la pantalla. Con la cámara a ras de suelo se los ve desde abajo. Con la cámara elevada, la inclinación se cambia con el slider o los botones (el mouse solo rota).</p>
+
+      <div class="section-title">Navegación</div>
+      <div class="fila-botones">
+        <button type="button" class="btn-mini" id="btnNorte">Norte arriba</button>
+        <button type="button" class="btn-mini" id="btnRecentrar">Recentrar</button>
+        <button type="button" class="btn-mini" id="btnVistaInicial">Vista inicial</button>
+      </div>
+      <div class="toggle-row"><span class="toggle-label">Zoom hacia el cursor</span><div class="switch" id="toggleZoomCursor"></div></div>
+      <div class="toggle-row" id="filaBloqueoPitch"><span class="toggle-label">Bloquear inclinación al rotar</span><div class="switch" id="toggleBloqueoPitch"></div></div>
+      <p class="hint">Zoom centrado: la rueda acerca hacia el centro de la pantalla y no hacia donde apunta el cursor, así los puntos no se corren. El mapa no te deja alejarte más de ~40 km de las universidades; “Recentrar” te devuelve al centro.</p>
+      <p class="hint">Con el mouse: clic derecho (o Ctrl) + arrastrar para rotar (e inclinar, si la cámara está a ras de suelo). En pantallas táctiles, dos dedos.</p>
+    </div>
   </details>
+
+  <details class="grupo">
+    <summary>Rotación y grabación</summary>
+    <div class="grupo-body">
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Duración de una vuelta</span><span id="valDuracion">12 s</span></div>
+        <input type="range" id="sliderDuracion" min="3" max="60" step="1" value="12">
+      </div>
+      <select id="selectSentido">
+        <option value="horario">Sentido horario</option>
+        <option value="antihorario">Sentido antihorario</option>
+      </select>
+      <div class="fila-botones" style="flex-wrap:nowrap;">
+        <button type="button" class="btn-accion secundario" id="btnGirar">Girar</button>
+        <button type="button" class="btn-accion" id="btnGrabar">Grabar una vuelta</button>
+      </div>
+      <button type="button" class="btn-mini" id="btnLimpio">Ocultar interfaz (tecla H)</button>
+      <p class="hint" id="msgGrabar">Grabar pide compartir una pestaña: elegí “Esta pestaña”. La interfaz se oculta durante la grabación y el video se descarga solo al terminar. Esc cancela.</p>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Altura de los puntos</summary>
+    <div class="grupo-body">
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Altura</span><span id="valAltura">5 km</span></div>
+        <input type="range" id="sliderAltura" min="0" max="20000" step="250" value="5000">
+      </div>
+      <div class="toggle-row"><span class="toggle-label">Mostrar línea vertical</span><div class="switch on" id="toggleStem"></div></div>
+      <div id="stemExtra">
+        <input type="color" id="colorStem" value="#211F1B">
+        <div class="slider-row">
+          <div class="slider-row-label"><span>Opacidad de la línea vertical</span><span id="valOpacidadStem">55%</span></div>
+          <input type="range" id="sliderOpacidadStem" min="5" max="100" value="55">
+        </div>
+        <div class="slider-row">
+          <div class="slider-row-label"><span>Grosor de la línea vertical</span><span id="valGrosorStem">1.2</span></div>
+          <input type="range" id="sliderGrosorStem" min="0.5" max="15" step="0.1" value="1.2">
+        </div>
+      </div>
+      <div class="toggle-row"><span class="toggle-label">Sombra en el suelo (experimental)</span><div class="switch" id="toggleSombra"></div></div>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Zonas</summary>
+    <div class="grupo-body">
+      <div id="zonasLista">
+        <div class="zona-row" data-zona="norte"><input type="color" class="zona-color" data-zona="norte" value="#F7A348" title="Color de la zona"><span class="zona-nombre">Zona Norte<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="norte">solo</button><div class="switch on zona-switch" data-zona="norte"></div></div>
+        <div class="zona-row" data-zona="oeste"><input type="color" class="zona-color" data-zona="oeste" value="#90ADF1" title="Color de la zona"><span class="zona-nombre">Zona Oeste<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="oeste">solo</button><div class="switch on zona-switch" data-zona="oeste"></div></div>
+        <div class="zona-row" data-zona="sur"><input type="color" class="zona-color" data-zona="sur" value="#CCB2FF" title="Color de la zona"><span class="zona-nombre">Zona Sur<em></em></span><button type="button" class="btn-mini btn-solo" data-zona="sur">solo</button><div class="switch on zona-switch" data-zona="sur"></div></div>
+      </div>
+      <div class="fila-botones"><button type="button" class="btn-mini" id="btnTodasZonas">Mostrar todas</button></div>
+      <p class="hint">El interruptor muestra u oculta la zona (puntos, nombres, líneas y conexiones). El círculo de color define el color de la zona en el modo "Por zona".</p>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Puntos</summary>
+    <div class="grupo-body">
+      <div class="section-title">Color</div>
+      <div class="segmented">
+        <button id="btnColorZona" class="active">Por zona</button>
+        <button id="btnColorIndividual">Individual</button>
+        <button id="btnColorUnico">Uno solo</button>
+      </div>
+      <input type="color" id="colorUnico" value="#211F1B" style="display:none;">
+      <div class="toggle-row" id="filaAleatorio" style="display:none;">
+        <span class="toggle-label">Colores aleatorios</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="btn-mini" id="btnRemezclar" style="display:none;">🔀 Remezclar</button>
+          <div class="switch" id="toggleAleatorio"></div>
+        </div>
+      </div>
+
+      <div class="section-title">Forma</div>
+      <select id="selectFormaGlobal">
+        <option value="circulo">Todos círculos</option>
+        <option value="cuadrado">Todos cuadrados</option>
+        <option value="rombo">Todos rombos</option>
+        <option value="hexagono">Todos hexágonos</option>
+        <option value="estrella">Todas estrellas</option>
+        <option value="trefoil">Todos tréboles (3)</option>
+        <option value="cuatrifolio">Todos tréboles (4)</option>
+        <option value="astroide">Todos astroides</option>
+        <option value="variadas">Variadas (una distinta por universidad)</option>
+      </select>
+      <p class="hint">Elegir una forma o un color global reemplaza los ajustes individuales de ese tipo.</p>
+
+      <div class="section-title">Aspecto</div>
+      <div class="toggle-row"><span class="toggle-label">Mostrar puntos</span><div class="switch on" id="togglePoints"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Mostrar borde</span><div class="switch on" id="toggleBorde"></div></div>
+      <input type="color" id="colorBorde" value="#F0EFEA">
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Tamaño de los puntos</span><span id="valTamano">11px</span></div>
+        <input type="range" id="sliderTamano" min="6" max="80" value="11">
+      </div>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Nombres</summary>
+    <div class="grupo-body">
+      <div class="toggle-row"><span class="toggle-label">Mostrar nombres</span><div class="switch on" id="toggleLabels"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Nombres en vertical</span><div class="switch" id="toggleNombresVertical"></div></div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Tamaño del texto</span><span id="valTamanoTexto">12 px</span></div>
+        <input type="range" id="sliderTamanoTexto" min="8" max="40" step="1" value="12">
+      </div>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Conexiones</summary>
+    <div class="grupo-body">
+      <div class="toggle-row"><span class="toggle-label">Mostrar conexiones</span><div class="switch on" id="toggleEdges"></div></div>
+      <div id="conexionesExtra">
+        <select id="selectNivelConexion">
+          <option value="altura">Conectan los puntos en altura</option>
+          <option value="suelo">Conectan en el suelo</option>
+        </select>
+        <div class="slider-row">
+          <div class="slider-row-label"><span>Arco de las conexiones</span><span id="valArco">0 m</span></div>
+          <input type="range" id="sliderArco" min="0" max="10000" step="250" value="0">
+        </div>
+        <div class="toggle-row"><span class="toggle-label">Conectar todas entre sí</span><div class="switch" id="toggleMesh"></div></div>
+        <div class="toggle-row"><span class="toggle-label">Líneas curvas</span><div class="switch" id="toggleCurva"></div></div>
+        <select id="selectEstiloLinea">
+          <option value="solida">Línea sólida</option>
+          <option value="punteada">Punteada</option>
+          <option value="discontinua">Discontinua</option>
+        </select>
+        <input type="color" id="colorLinea" value="#211F1B">
+        <div class="slider-row">
+          <div class="slider-row-label"><span>Opacidad de líneas</span><span id="valOpacidadLinea">22%</span></div>
+          <input type="range" id="sliderOpacidadLinea" min="5" max="100" value="22">
+        </div>
+        <div class="slider-row">
+          <div class="slider-row-label"><span>Grosor de líneas</span><span id="valGrosor">1.2</span></div>
+          <input type="range" id="sliderGrosor" min="0.5" max="15" step="0.1" value="1.2">
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Fondo y mapa</summary>
+    <div class="grupo-body">
+      <div class="slider-row-label"><span>Color de fondo</span></div>
+      <input type="color" id="colorFondo" value="#F0EFEA">
+      <div class="section-title">Mapa base</div>
+      <div class="toggle-row"><span class="toggle-label">Mostrar mapa base</span><div class="switch on" id="toggleBase"></div></div>
+      <select id="selectBasemap">
+        <option value="grisClaro">Gris claro (sin texto)</option>
+        <option value="grisOscuro">Gris oscuro (sin texto)</option>
+        <option value="satelital">Satelital (sin texto)</option>
+        <option value="terreno">Terreno (sin texto)</option>
+        <option value="osm">Calles y nombres (OSM)</option>
+      </select>
+      <div class="toggle-row"><span class="toggle-label">Blanco y negro</span><div class="switch" id="toggleBN"></div></div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Opacidad del mapa</span><span id="valOpacidad">80%</span></div>
+        <input type="range" id="sliderOpacidad" min="10" max="100" value="80">
+      </div>
+    </div>
+  </details>
+
+  <details class="grupo">
+    <summary>Personalizar cada universidad</summary>
+    <div class="grupo-body">
+      <div id="personalizarLista"></div>
+    </div>
+  </details>
+
+  </div>
 </div>
 
 <div class="credit">TFI · Diseño y Comunicación Visual · UNLa</div>
@@ -544,7 +638,7 @@
   function todosLosPares(n){ const r=[]; for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) r.push([i,j]); return r; }
   const PARES_TODOS = todosLosPares(universidades.length);
 
-  const coloresPorZona = { norte: "#2E7D6B", oeste: "#C97A2B", sur: "#5B4B8A" };
+  const coloresPorZona = { norte: "#F7A348", oeste: "#90ADF1", sur: "#CCB2FF" };
   const coloresIndividuales = {
     UNDAV: "#004395", UNTREF: "#24639a", UNSO: "#003363", UNLZ: "#0004f6",
     UNAJ: "#2799d6", UNQ: "#c4122e", UNLa: "#8e0028", UNPAZ: "#20386d",
@@ -599,6 +693,8 @@
     conBorde: true,
     colorBorde: "#F0EFEA",
     pointSize: 11,
+    tamanoTexto: 12,         // px, nombres de las universidades
+    colorFondo: "#F0EFEA",   // fondo del mapa (se ve donde no hay mapa base)
     // altura y línea vertical
     alto: 5000,              // metros sobre el terreno
     camSigue: true,          // la cámara mira desde la altura de los puntos
@@ -693,7 +789,7 @@
 
   function estiloInicial(){
     const sources = {};
-    const layers = [{ id: 'fondo', type: 'background', paint: { 'background-color': '#F0EFEA' } }];
+    const layers = [{ id: 'fondo', type: 'background', paint: { 'background-color': estado.colorFondo } }];
     Object.entries(BASEMAPS).forEach(([id, b]) => {
       sources[id] = { type: 'raster', tiles: b.tiles, tileSize: 256, maxzoom: b.maxzoom, attribution: b.attribution };
       layers.push({
@@ -1483,11 +1579,16 @@
   // ---- Modo limpio ----
   function modoLimpio(on){ document.body.classList.toggle('limpio', on); }
   document.getElementById('btnLimpio').addEventListener('click', function(){ modoLimpio(true); });
+  // Los sliders, interruptores y selectores de color no escriben texto, así que H funciona aunque tengan el foco.
+  function estaEscribiendo(t){
+    if (!t) return false;
+    if (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+    return t.tagName === 'INPUT' && !['range', 'color', 'checkbox', 'radio', 'button', 'file'].includes(t.type);
+  }
   document.addEventListener('keydown', function(e){
-    const t = e.target && e.target.tagName;
-    if (t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return;
+    if (e.key === 'Escape') { if (grabacion) cancelarGrabacion('Grabación cancelada.'); else modoLimpio(false); return; }
+    if (estaEscribiendo(e.target)) return;
     if (e.key === 'h' || e.key === 'H') { modoLimpio(!document.body.classList.contains('limpio')); }
-    if (e.key === 'Escape') { if (grabacion) cancelarGrabacion('Grabación cancelada.'); else modoLimpio(false); }
   });
 
   // ---- Grabación ----
@@ -1572,10 +1673,89 @@
     if (grabacion) cancelarGrabacion('Grabación cancelada: tocaste el mapa.');
   }, { passive: true }));
 
+  // ---- COLOR DE FONDO Y TAMAÑO DEL TEXTO ----
+  function aplicarFondo(){
+    document.documentElement.style.setProperty('--fondo-mapa', estado.colorFondo);
+    if (map.getLayer('fondo')) map.setPaintProperty('fondo', 'background-color', estado.colorFondo);
+  }
+  document.getElementById('colorFondo').addEventListener('input', function(){ estado.colorFondo = this.value; aplicarFondo(); });
+  document.getElementById('sliderTamanoTexto').addEventListener('input', function(){
+    estado.tamanoTexto = parseInt(this.value, 10);
+    document.getElementById('valTamanoTexto').textContent = estado.tamanoTexto + ' px';
+    document.documentElement.style.setProperty('--tam-texto', estado.tamanoTexto + 'px');
+  });
+
+  // ---- PALETA RÁPIDA DE COLORES ----
+  // Al tocar cualquier selector de color (los fijos y los que se crean después) aparece esta paleta;
+  // "Otro color…" abre el selector normal del navegador. Para cambiar los colores, editá PALETA.
+  const PALETA = ['#F7A348', '#90ADF1', '#CCB2FF', '#F4F470', '#211F1B', '#000000', '#FFFFFF'];
+  const paletaPop = document.createElement('div');
+  paletaPop.id = 'paletaPop';
+  const filaSw = document.createElement('div');
+  filaSw.className = 'fila-sw';
+  PALETA.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.dataset.color = c.toLowerCase();
+    b.title = c.replace('#', ''); b.style.background = c;
+    filaSw.appendChild(b);
+  });
+  paletaPop.appendChild(filaSw);
+  const btnOtro = document.createElement('button');
+  btnOtro.type = 'button'; btnOtro.className = 'otro'; btnOtro.textContent = 'Otro color…';
+  paletaPop.appendChild(btnOtro);
+  document.body.appendChild(paletaPop);
+
+  let inputPaleta = null, permitirNativo = false;
+  function abrirPaleta(input){
+    inputPaleta = input;
+    const actual = (input.value || '').toLowerCase();
+    paletaPop.querySelectorAll('.sw').forEach(b => b.classList.toggle('sel', b.dataset.color === actual));
+    paletaPop.style.display = 'block';
+    const r = input.getBoundingClientRect(), w = paletaPop.offsetWidth, h = paletaPop.offsetHeight;
+    const x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    let y = r.bottom + 6;
+    if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 6);
+    paletaPop.style.left = x + 'px'; paletaPop.style.top = y + 'px';
+  }
+  function cerrarPaleta(){ paletaPop.style.display = 'none'; inputPaleta = null; }
+  document.addEventListener('click', function(e){
+    const t = e.target;
+    if (t && t.matches && t.matches('input[type=color]')) {
+      if (permitirNativo) { permitirNativo = false; return; }     // "Otro color…": deja abrir el selector normal
+      e.preventDefault();
+      if (inputPaleta === t && paletaPop.style.display === 'block') cerrarPaleta(); else abrirPaleta(t);
+      return;
+    }
+    if (!paletaPop.contains(t)) cerrarPaleta();
+  }, true);
+  paletaPop.addEventListener('click', function(e){
+    const b = e.target.closest('button');
+    if (!b || !inputPaleta) return;
+    const inp = inputPaleta;
+    if (b.classList.contains('sw')) {
+      inp.value = b.dataset.color;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      cerrarPaleta();
+    } else if (b.classList.contains('otro')) {
+      cerrarPaleta();
+      permitirNativo = true; inp.click(); permitirNativo = false;
+    }
+  });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') cerrarPaleta(); });
+  window.addEventListener('resize', cerrarPaleta);
+  document.querySelector('.panel-body').addEventListener('scroll', cerrarPaleta);
+
+  // ---- ACORDEONES: al abrir un grupo se cierran los demás ----
+  const grupos = document.querySelectorAll('details.grupo');
+  grupos.forEach(d => d.addEventListener('toggle', function(){
+    if (d.open) grupos.forEach(o => { if (o !== d) o.open = false; });
+  }));
+
   // ---- AJUSTES PREESTABLECIDOS ----
   // Cada preset es completo: parte de "estandar" y cambia solo lo que lo distingue, así el resultado no
   // depende de cómo estaba el panel antes. Se aplican moviendo los mismos controles del panel, de modo que
-  // todo queda sincronizado. Para crear uno nuevo, sumá una entrada acá y un botón con data-preset.
+  // todo queda sincronizado. Para crear uno nuevo, sumá una entrada acá y una <option> en #selectPreset.
   const PRESET_ESTANDAR = {
     // vista
     center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch: VISTA_INICIAL.pitch, bearing: VISTA_INICIAL.bearing,
@@ -1584,17 +1764,18 @@
     camSigue: true, alto: 5000, lineaVertical: true, colorStem: '#211F1B', opacidadStem: 55, grosorStem: 1.2, sombra: false,
     // zonas, color y forma
     zonasTodas: true, colorMode: 'zona', colorUnico: '#000000', forma: 'circulo',
-    borde: true, colorBorde: '#F0EFEA', puntos: true, nombres: true, nombresVertical: false, tamano: 11,
+    colorZona: { norte: '#F7A348', oeste: '#90ADF1', sur: '#CCB2FF' },
+    borde: true, colorBorde: '#F0EFEA', puntos: true, nombres: true, nombresVertical: false, tamano: 11, tamanoTexto: 12,
     // conexiones
     conexiones: true, nivelConexion: 'altura', arco: 0, mesh: false, curva: false,
     estiloLinea: 'solida', colorLinea: '#211F1B', opacidadLinea: 22, grosorLinea: 1.2,
     // mapa de fondo
-    base: true, basemap: 'grisClaro', bn: false, opacidadBase: 80,
+    base: true, basemap: 'grisClaro', bn: false, opacidadBase: 80, colorFondo: '#F0EFEA',
   };
   const PRESET_UNICON = Object.assign({}, PRESET_ESTANDAR, {
     pitch: 90, camSigue: true, lineaVertical: false,
     colorMode: 'unico', colorUnico: '#000000', borde: false,
-    nombres: false, conexiones: false, base: false,
+    nombres: false, conexiones: false, base: false, colorFondo: '#FFFFFF',
   });
   const PRESETS = {
     estandar: PRESET_ESTANDAR,
@@ -1605,12 +1786,16 @@
   function fijarSwitch(id, on){ const el = document.getElementById(id); if (el.classList.contains('on') !== !!on) el.click(); }
   function fijarRango(id, v){ const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('input')); }
   function fijarSelect(id, v){ const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('change')); }
-  function fijarColor(id, v){ const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('input')); }
+  function fijarColor_(el, v){ el.value = v; el.dispatchEvent(new Event('input')); }
+  function fijarColor(id, v){ fijarColor_(document.getElementById(id), v); }
 
   function aplicarPreset(clave){
     const P = PRESETS[clave];
     if (!P) return;
+    cerrarPaleta();
     if (P.zonasTodas) document.getElementById('btnTodasZonas').click();
+    // colores de zona
+    Object.keys(P.colorZona).forEach(z => fijarColor_(document.querySelector('.zona-color[data-zona="' + z + '"]'), P.colorZona[z]));
     // forma y color globales (borran los ajustes individuales)
     fijarSelect('selectFormaGlobal', P.forma);
     document.getElementById(P.colorMode === 'unico' ? 'btnColorUnico' : 'btnColorZona').click();
@@ -1622,6 +1807,7 @@
     fijarSwitch('toggleLabels', P.nombres);
     fijarSwitch('toggleNombresVertical', P.nombresVertical);
     fijarRango('sliderTamano', P.tamano);
+    fijarRango('sliderTamanoTexto', P.tamanoTexto);
     // conexiones
     fijarSwitch('toggleEdges', P.conexiones);
     fijarSelect('selectNivelConexion', P.nivelConexion);
@@ -1637,6 +1823,7 @@
     fijarSelect('selectBasemap', P.basemap);
     fijarSwitch('toggleBN', P.bn);
     fijarRango('sliderOpacidad', P.opacidadBase);
+    fijarColor('colorFondo', P.colorFondo);
     // altura, línea vertical y sombra
     fijarRango('sliderAltura', P.alto);
     fijarSwitch('toggleStem', P.lineaVertical);
@@ -1650,9 +1837,29 @@
     // la vista va al final: los cambios de arriba (altura de la cámara, lente) cancelarían una animación en curso
     animarVista({ center: P.center, zoom: P.zoom, pitch: P.pitch, bearing: P.bearing }, 900);
   }
-  document.querySelectorAll('.presets button').forEach(btn => {
-    btn.addEventListener('click', function(){ aplicarPreset(this.dataset.preset); });
+
+  // ---- Desplegable de ajustes preestablecidos ----
+  // Muestra el ajuste aplicado y pasa a "Personalizado" apenas se mueve cualquier otro control del panel,
+  // así volver a elegir un ajuste siempre lo aplica.
+  const selPreset = document.getElementById('selectPreset');
+  let aplicandoPreset = false;
+  selPreset.addEventListener('change', function(){
+    if (this.value === 'personalizado') return;
+    aplicandoPreset = true;
+    try { aplicarPreset(this.value); } finally { aplicandoPreset = false; }
   });
+  const NO_SON_AJUSTES = ['selectPreset', 'sliderDuracion', 'selectSentido', 'toggleZoomCursor', 'toggleBloqueoPitch',
+    'btnGirar', 'btnGrabar', 'btnLimpio', 'btnNorte', 'btnRecentrar', 'btnVistaInicial'];
+  function marcarPersonalizado(e){
+    if (aplicandoPreset) return;
+    const el = e.target && e.target.closest ? e.target.closest('input, select, .switch, button') : null;
+    if (!el || NO_SON_AJUSTES.includes(el.id)) return;
+    const esCampo = el.matches('input, select');
+    if (e.type === 'click' && esCampo) return;      // abrir un selector o tocar un slider no cambia nada todavía
+    if (e.type !== 'click' && !esCampo) return;     // los interruptores y botones cuentan por su clic
+    if (selPreset.value !== 'personalizado') selPreset.value = 'personalizado';
+  }
+  ['input', 'change', 'click'].forEach(t => document.getElementById('panel').addEventListener(t, marcarPersonalizado));
 </script>
 
 </body>
