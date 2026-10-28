@@ -184,6 +184,22 @@
      "Fondo y mapa" > "Color de fondo" cambia el fondo del mapa (se ve
      donde no hay mapa base). Los ajustes Unicon lo ponen en blanco
      puro (#FFFFFF); el Estándar usa #F0EFEA.
+
+ 20) PATRÓN (EXPORTAR)
+     Grupo "Patrón (exportar)": repite la nube de 16 puntos en un
+     lienzo de tamaño fijo, cada copia con inclinación y rotación al
+     azar (rangos configurables) pero con la misma lente. Distribución:
+     grilla, ladrillo (horizontal o vertical) o al azar. Separación
+     1× = las copias se tocan, menos = se pisan. Color: como en el
+     mapa, o al azar (de la paleta rápida) por copia, por zona o por
+     punto. Contenido: puntos, conexiones y nombres. "Ver patrón"
+     muestra una vista previa que se actualiza sola; PNG, JPG y SVG se
+     descargan al tamaño del lienzo. Con la misma semilla y los mismos
+     ajustes sale siempre el mismo patrón (el nombre del archivo la
+     incluye). Usa la forma, borde, tamaño, color, conexiones y
+     nombres del panel. No incluye imágenes por universidad, líneas
+     verticales ni sombra. Máximo 1200 copias (COPIAS_MAX). Para el
+     SVG la fuente Roboto Condensed tiene que estar instalada.
   ============================================================
 -->
 
@@ -366,6 +382,34 @@
   }
   .btn-accion.secundario{ background: transparent; color: var(--ink); border-color: var(--line); }
   .btn-accion.activo{ background: #B3261E; border-color: #B3261E; color: #fff; }
+  input[type=number], input[type=text]{
+    width:100%; font-family: var(--font); font-size: 11.5px;
+    padding: 5px 6px; border-radius: 4px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); margin-bottom: 8px;
+  }
+  .fila-2{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+  .fila-semilla{ display:flex; gap:6px; align-items:flex-start; }
+  .fila-semilla input{ flex:1; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em; }
+  .fila-semilla .btn-mini{ padding:6px 10px; font-size:11px; }
+
+  /* Vista previa del patrón: ocupa el área del mapa (el panel queda a la izquierda, activo) */
+  #patronVista{
+    position:fixed; left:0; top:0; right:0; bottom:0; z-index:900; display:none;
+    padding-left: 324px; align-items:center; justify-content:center; background:#35332f;
+  }
+  body.patron-abierto #patronVista{ display:flex; }
+  body.patron-abierto .credit, body.patron-abierto .maplibregl-ctrl-bottom-right{ display:none; }
+  #patronCanvas{
+    max-width: calc(100vw - 364px); max-height: calc(100vh - 60px);
+    box-shadow: 0 6px 30px rgba(0,0,0,0.4);
+  }
+  #patronCanvas.transparente{
+    background-color:#fff;
+    background-image: linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),
+                      linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);
+    background-size:20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0;
+  }
+  #patronCerrar{ position:absolute; top:20px; right:64px; padding:6px 10px; font-size:11px; }
   .credit{ position:absolute; bottom:34px; right:16px; z-index:1000; font-size: 10px; color: var(--ink-soft); }
 </style>
 </head>
@@ -601,6 +645,89 @@
     </div>
   </details>
 
+  <details class="grupo" id="grupoPatron">
+    <summary>Patrón (exportar)</summary>
+    <div class="grupo-body">
+      <div class="section-title">Distribución</div>
+      <select id="selectPatronDistribucion">
+        <option value="grilla">Grilla</option>
+        <option value="ladrillo">Ladrillo</option>
+        <option value="azar">Al azar</option>
+      </select>
+      <select id="selectPatronOrientacion" style="display:none;">
+        <option value="horizontal">Ladrillo horizontal</option>
+        <option value="vertical">Ladrillo vertical</option>
+      </select>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Tamaño de cada copia</span><span id="valPatronTamano">700 px</span></div>
+        <input type="range" id="sliderPatronTamano" min="50" max="3000" step="10" value="700">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Separación entre copias</span><span id="valPatronSeparacion">0.80×</span></div>
+        <input type="range" id="sliderPatronSeparacion" min="0.2" max="3" step="0.05" value="0.8">
+      </div>
+      <p class="hint">1× = las copias se tocan; menos de 1× = se pisan. En “Al azar” define la densidad.</p>
+
+      <div class="section-title">Variación al azar</div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Inclinación mínima</span><span id="valPatronPitchMin">0°</span></div>
+        <input type="range" id="sliderPatronPitchMin" min="0" max="89" step="1" value="0">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Inclinación máxima</span><span id="valPatronPitchMax">80°</span></div>
+        <input type="range" id="sliderPatronPitchMax" min="0" max="89" step="1" value="80">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Rotación mínima</span><span id="valPatronRotMin">0°</span></div>
+        <input type="range" id="sliderPatronRotMin" min="0" max="360" step="1" value="0">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-label"><span>Rotación máxima</span><span id="valPatronRotMax">360°</span></div>
+        <input type="range" id="sliderPatronRotMax" min="0" max="360" step="1" value="360">
+      </div>
+      <div class="slider-row-label"><span>Color</span></div>
+      <select id="selectPatronColor">
+        <option value="mapa">Como en el mapa</option>
+        <option value="copia">Uno al azar por copia</option>
+        <option value="zona">Uno al azar por zona</option>
+        <option value="punto">Uno al azar por punto</option>
+      </select>
+
+      <div class="section-title">Contenido</div>
+      <div class="toggle-row"><span class="toggle-label">Puntos</span><div class="switch on" id="togglePatronPuntos"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Conexiones</span><div class="switch" id="togglePatronConexiones"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Nombres</span><div class="switch" id="togglePatronNombres"></div></div>
+      <p class="hint">Usa la forma, el borde, el tamaño, el color, las conexiones, los nombres y la lente que tengas configurados en el panel. Las imágenes subidas por universidad, las líneas verticales y la sombra no se incluyen.</p>
+
+      <div class="section-title">Lienzo</div>
+      <div class="fila-2">
+        <div><div class="slider-row-label"><span>Ancho (px)</span></div><input type="number" id="inputPatronAncho" min="100" max="20000" step="100" value="3000"></div>
+        <div><div class="slider-row-label"><span>Alto (px)</span></div><input type="number" id="inputPatronAlto" min="100" max="20000" step="100" value="3000"></div>
+      </div>
+      <select id="selectPatronFondo">
+        <option value="color">Con el color de fondo actual</option>
+        <option value="transparente">Transparente (PNG y SVG)</option>
+      </select>
+
+      <div class="section-title">Semilla</div>
+      <div class="fila-semilla">
+        <input type="text" id="inputPatronSemilla" value="UNICON" maxlength="24" spellcheck="false">
+        <button type="button" class="btn-mini" id="btnPatronSemilla">Nueva</button>
+      </div>
+      <p class="hint">La misma semilla con los mismos ajustes da siempre el mismo patrón.</p>
+
+      <div class="fila-botones" style="flex-wrap:nowrap;">
+        <button type="button" class="btn-accion secundario" id="btnPatronVista">Ver patrón</button>
+      </div>
+      <div class="fila-botones" style="flex-wrap:nowrap;">
+        <button type="button" class="btn-accion" id="btnPatronPNG">PNG</button>
+        <button type="button" class="btn-accion" id="btnPatronJPG">JPG</button>
+        <button type="button" class="btn-accion" id="btnPatronSVG">SVG</button>
+      </div>
+      <p class="hint" id="msgPatron">“Ver patrón” muestra una vista previa que se actualiza al mover los controles. PNG, JPG y SVG se descargan al tamaño del lienzo.</p>
+    </div>
+  </details>
+
   <details class="grupo">
     <summary>Personalizar cada universidad</summary>
     <div class="grupo-body">
@@ -609,6 +736,11 @@
   </details>
 
   </div>
+</div>
+
+<div id="patronVista">
+  <canvas id="patronCanvas"></canvas>
+  <button type="button" class="btn-mini" id="patronCerrar">Cerrar vista previa (Esc)</button>
 </div>
 
 <div class="credit">TFI · Diseño y Comunicación Visual · UNLa</div>
@@ -1637,6 +1769,7 @@
     const g = grabacion = { stream, bearing0: map.getBearing(), cancelada: false, rec: null };
     stream.getVideoTracks()[0].addEventListener('ended', function(){ if (grabacion === g && !g.terminando) cancelarGrabacion('Se dejó de compartir la pestaña: grabación cancelada.'); });
     detenerRotacion();
+    if (typeof cerrarVistaPatron === 'function') cerrarVistaPatron();
     document.body.classList.add('grabando');
     modoLimpio(true);
     await esperar(1000);                 // deja que desaparezca el aviso del navegador y se pinte la vista limpia
@@ -1752,6 +1885,405 @@
     if (d.open) grupos.forEach(o => { if (o !== d) o.open = false; });
   }));
 
+  // ---- PATRÓN: repetición de la nube de puntos, con variación al azar (exporta PNG, JPG y SVG) ----
+  // Cada copia es la misma nube de universidades vista con la misma lente, pero con inclinación y rotación
+  // al azar. No usa el motor del mapa: proyecta con su propia cámara (la misma fórmula que posicionCamara),
+  // así que no depende del tamaño de la pantalla y puede salir a cualquier resolución. La escena se arma una
+  // vez como lista de elementos (líneas, puntos, textos) y dos exportadores la dibujan: canvas (PNG/JPG) y SVG.
+  const REF = 1000;               // lado (px) de la pantalla virtual con que se mide cada copia
+  const COPIAS_MAX = 1200;        // tope de copias para no sobrecargar el navegador
+
+  // Formas en coordenadas normalizadas (centradas, de -0,5 a 0,5). Equivalen a los clip-path de FORMAS.
+  const FORMAS_UNIT = (function(){
+    const circ = (cx, cy, r) => [['M', cx + r, cy], ['A', r, r, 0, 1, 0, cx - r, cy], ['A', r, r, 0, 1, 0, cx + r, cy], ['Z']];
+    const poli = pts => pts.map((p, i) => [i ? 'L' : 'M', p[0], p[1]]).concat([['Z']]);
+    const pct = p => [(p[0] - 50) / 100, (p[1] - 50) / 100];
+    return {
+      circulo: circ(0, 0, 0.5),
+      cuadrado: poli([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]),
+      rombo: poli([[0, -0.5], [0.5, 0], [0, 0.5], [-0.5, 0]]),
+      hexagono: poli([[-0.25, -0.5], [0.25, -0.5], [0.5, 0], [0.25, 0.5], [-0.25, 0.5], [-0.5, 0]]),
+      estrella: poli([[50, 0], [61, 35], [98, 35], [68, 57], [79, 91], [50, 70], [21, 91], [32, 57], [2, 35], [39, 35]].map(pct)),
+      trefoil: [].concat(circ(0, -0.25, 0.32), circ(-0.2175, 0.125, 0.32), circ(0.2175, 0.125, 0.32)),
+      cuatrifolio: [].concat(circ(0, -0.25, 0.32), circ(0.25, 0, 0.32), circ(0, 0.25, 0.32), circ(-0.25, 0, 0.32)),
+      astroide: [['M', 0, -0.5], ['Q', 0, 0, 0.5, 0], ['Q', 0, 0, 0, 0.5], ['Q', 0, 0, -0.5, 0], ['Q', 0, 0, 0, -0.5], ['Z']],
+    };
+  })();
+  function redondear(n, dec){ const m = Math.pow(10, dec); return String(Math.round(n * m) / m); }
+  // Trazado SVG de una forma centrada en (cx, cy) y de lado s
+  function dForma(nombre, cx, cy, s, dec){
+    dec = dec === undefined ? 2 : dec;
+    return (FORMAS_UNIT[nombre] || FORMAS_UNIT.circulo).map(sg => {
+      const t = sg[0];
+      if (t === 'Z') return 'Z';
+      if (t === 'A') return 'A' + redondear(sg[1] * s, dec) + ' ' + redondear(sg[2] * s, dec) + ' 0 1 0 ' + redondear(cx + sg[6] * s, dec) + ' ' + redondear(cy + sg[7] * s, dec);
+      const v = [];
+      for (let i = 1; i < sg.length; i += 2) v.push(redondear(cx + sg[i] * s, dec) + ' ' + redondear(cy + sg[i + 1] * s, dec));
+      return t + v.join(' ');
+    }).join('');
+  }
+
+  // Cámara propia (misma fórmula que posicionCamara, pero con parámetros en vez del estado del mapa)
+  function crearCamara(o){
+    const p = o.pitch * Math.PI / 180, b = o.bearing * Math.PI / 180, fov = o.fov * Math.PI / 180;
+    const mundoPx = TILE_MAP * Math.pow(2, o.zoom);
+    const focal = 0.5 * o.H / Math.tan(fov / 2);
+    const d = focal / mundoPx;
+    const mc = maplibregl.MercatorCoordinate.fromLngLat(o.center);
+    const zc = o.elev * mc.meterInMercatorCoordinateUnits();
+    const sp = Math.sin(p), cp = Math.cos(p), sb = Math.sin(b), cb = Math.cos(b);
+    return { x: mc.x - sb * d * sp, y: mc.y + cb * d * sp, z: zc + d * cp,
+             f: [sb * sp, -cb * sp, -cp], r: [cb, sb, 0], u: [sb * cp, -cb * cp, sp], focal, W: o.W, H: o.H };
+  }
+  // Proyecta un punto dado en coordenadas mercator (x, y) y altura mercator (z). Devuelve [x, y] o null.
+  function proy(cam, mx, my, mz){
+    const vx = mx - cam.x, vy = my - cam.y, vz = mz - cam.z;
+    const depth = vx * cam.f[0] + vy * cam.f[1] + vz * cam.f[2];
+    if (depth <= 1e-9) return null;
+    const sx = vx * cam.r[0] + vy * cam.r[1] + vz * cam.r[2];
+    const su = vx * cam.u[0] + vy * cam.u[1] + vz * cam.u[2];
+    return [cam.W / 2 + cam.focal * sx / depth, cam.H / 2 - cam.focal * su / depth];
+  }
+
+  // Azar con semilla: la misma semilla y los mismos ajustes dan siempre el mismo patrón
+  function hashSemilla(str){
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+    h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  }
+  function prng(str){
+    let a = hashSemilla(str);
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function nuevaSemilla(){
+    const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let s = '';
+    for (let i = 0; i < 6; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return s;
+  }
+
+  // Colores al azar: la paleta rápida, sin el color que coincide con el fondo (se vería invisible)
+  function paletaPatron(fondo){
+    const bg = (fondo || '').toLowerCase();
+    const todos = PALETA.map(c => c.toLowerCase());
+    const util = todos.filter(c => c !== bg);
+    return util.length ? util : todos;
+  }
+
+  // Lee los controles del panel
+  function leerPatron(){
+    const g = id => document.getElementById(id);
+    const num = (id, def, min, max) => { const v = parseFloat(g(id).value); return Math.min(max, Math.max(min, isFinite(v) ? v : def)); };
+    const on = id => g(id).classList.contains('on');
+    let pmin = num('sliderPatronPitchMin', 0, 0, 89), pmax = num('sliderPatronPitchMax', 80, 0, 89);
+    let rmin = num('sliderPatronRotMin', 0, 0, 360), rmax = num('sliderPatronRotMax', 360, 0, 360);
+    if (pmin > pmax) { const t = pmin; pmin = pmax; pmax = t; }
+    if (rmin > rmax) { const t = rmin; rmin = rmax; rmax = t; }
+    return {
+      distribucion: g('selectPatronDistribucion').value, orientacion: g('selectPatronOrientacion').value,
+      tamano: num('sliderPatronTamano', 700, 50, 3000), separacion: num('sliderPatronSeparacion', 0.8, 0.2, 3),
+      pmin, pmax, rmin, rmax, color: g('selectPatronColor').value,
+      puntos: on('togglePatronPuntos'), conexiones: on('togglePatronConexiones'), nombres: on('togglePatronNombres'),
+      W: Math.round(num('inputPatronAncho', 3000, 100, 20000)), H: Math.round(num('inputPatronAlto', 3000, 100, 20000)),
+      fondo: g('selectPatronFondo').value, semilla: (g('inputPatronSemilla').value || '').trim().toUpperCase() || 'UNICON',
+      fov: lenteDeseada, elev: alturaCamara(),
+    };
+  }
+
+  // Arma la escena: lista de copias (en orden de dibujo) con sus líneas, puntos y textos ya posicionados
+  function generarEscena(c){
+    const visible = u => estado.zonasVisibles[u.zona] !== false;
+    const geo = [];
+    universidades.forEach((u, idx) => {
+      if (!visible(u)) return;
+      const mc = maplibregl.MercatorCoordinate.fromLngLat([u.lng, u.lat], 0);
+      geo.push({ u, idx, mx: mc.x, my: mc.y, mz: altoDe(u) * mc.meterInMercatorCoordinateUnits() });
+    });
+    if (!geo.length) return { error: 'No hay universidades visibles: activá alguna zona.' };
+    const S = c.tamano, esp = Math.max(1, S * c.separacion), W = c.W, H = c.H;
+
+    // referencia: la nube vista desde arriba define qué es "el tamaño de una copia"
+    const cam0 = crearCamara({ center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch: 0, bearing: 0, fov: c.fov, W: REF, H: REF, elev: c.elev });
+    const q0 = geo.map(g => proy(cam0, g.mx, g.my, g.mz)).filter(Boolean);
+    const xs = q0.map(q => q[0]), ys = q0.map(q => q[1]);
+    const R = Math.max(Math.max.apply(null, xs) - Math.min.apply(null, xs), Math.max.apply(null, ys) - Math.min.apply(null, ys), 40);
+    const k = S / R;
+
+    // posiciones de las copias
+    const pos = [];
+    if (c.distribucion === 'azar') {
+      const n = Math.round(((W + S) * (H + S)) / (esp * esp));
+      if (n > COPIAS_MAX) return { error: 'Serían ' + n + ' copias (el máximo es ' + COPIAS_MAX + '). Aumentá el tamaño o la separación, o reducí el lienzo.' };
+      const r = prng(c.semilla + ':pos');
+      for (let i = 0; i < n; i++) pos.push([-S / 2 + r() * (W + S), -S / 2 + r() * (H + S)]);
+    } else {
+      const extra = c.distribucion === 'ladrillo' ? 1 : 0;
+      const cols = Math.ceil((W + S) / esp) + 1 + extra, rows = Math.ceil((H + S) / esp) + 1 + extra;
+      if (cols * rows > COPIAS_MAX) return { error: 'Serían ' + (cols * rows) + ' copias (el máximo es ' + COPIAS_MAX + '). Aumentá el tamaño o la separación, o reducí el lienzo.' };
+      for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
+        let x = W / 2 + (q - (cols - 1) / 2) * esp, y = H / 2 + (r - (rows - 1) / 2) * esp;
+        if (c.distribucion === 'ladrillo') { if (c.orientacion === 'vertical') { if (q % 2) y += esp / 2; } else if (r % 2) x += esp / 2; }
+        pos.push([x, y]);
+      }
+    }
+
+    // aristas (la geometría no depende de la cámara: se calcula una sola vez)
+    const aristas = [];
+    if (c.conexiones) {
+      const pares = (estado.mesh ? PARES_TODOS : edgesCurados).filter(pr => visible(universidades[pr[0]]) && visible(universidades[pr[1]]));
+      const pasos = (estado.curva || estado.arco > 0) ? 24 : 1;
+      pares.forEach(pr => {
+        const A = universidades[pr[0]], B = universidades[pr[1]], muestras = [];
+        for (let i = 0; i <= pasos; i++) {
+          const t = i / pasos;
+          const alt0 = estado.nivelConexion === 'altura' ? altoDe(A) + (altoDe(B) - altoDe(A)) * t : 0;
+          const ll = puntoEnConexion(A, B, estado.curva, t);
+          const mc = maplibregl.MercatorCoordinate.fromLngLat(ll, 0);
+          muestras.push([mc.x, mc.y, (alt0 + estado.arco * Math.sin(Math.PI * t)) * mc.meterInMercatorCoordinateUnits()]);
+        }
+        aristas.push(muestras);
+      });
+    }
+
+    const fondo = c.fondo === 'transparente' ? null : String(estado.colorFondo).toLowerCase();
+    const pal = paletaPatron(fondo);
+    const colMapa = universidades.map(u => aHex(colorDe(u)).toLowerCase());
+    const size = estado.pointSize * k;
+    const dentro = (x, y, m) => x > -m && x < W + m && y > -m && y < H + m;
+
+    const copias = pos.map((p, i) => {
+      // todos los sorteos se hacen siempre, en el mismo orden: activar o no contenido no cambia el azar
+      const r = prng(c.semilla + '#' + i);
+      const pitch = c.pmin + r() * (c.pmax - c.pmin), bearing = c.rmin + r() * (c.rmax - c.rmin), z = r();
+      const pick = () => pal[Math.floor(r() * pal.length)];
+      const colCopia = pick(), colZona = { norte: pick(), oeste: pick(), sur: pick() };
+      const colPunto = universidades.map(pick);
+      const cam = crearCamara({ center: VISTA_INICIAL.center, zoom: VISTA_INICIAL.zoom, pitch, bearing, fov: c.fov, W: REF, H: REF, elev: c.elev });
+      const cp = { i, z, pitch, bearing, cx: p[0], cy: p[1], lineas: [], puntos: [], textos: [] };
+      const aPantalla = q => [p[0] + k * (q[0] - REF / 2), p[1] + k * (q[1] - REF / 2)];
+
+      aristas.forEach(muestras => {
+        let seg = [];
+        const cerrar = () => { if (seg.length > 1 && seg.some(v => dentro(v[0], v[1], 50))) cp.lineas.push(seg); seg = []; };
+        muestras.forEach(m => { const q = proy(cam, m[0], m[1], m[2]); if (!q) cerrar(); else seg.push(aPantalla(q)); });
+        cerrar();
+      });
+      geo.forEach(g => {
+        const q = proy(cam, g.mx, g.my, g.mz);
+        if (!q) return;
+        const s = aPantalla(q);
+        if (!dentro(s[0], s[1], size * 3)) return;
+        const col = c.color === 'copia' ? colCopia : c.color === 'zona' ? colZona[g.u.zona] : c.color === 'punto' ? colPunto[g.idx] : colMapa[g.idx];
+        if (c.puntos) cp.puntos.push({ x: s[0], y: s[1], s: size, forma: formaDe(g.u), c: col, idx: g.idx });
+        if (c.nombres) cp.textos.push({ x: s[0], y: s[1], s: size, txt: g.u.sigla, idx: g.idx });
+      });
+      return cp;
+    });
+    copias.sort((a, b) => a.z - b.z);
+
+    return {
+      W, H, k, fondo, copias,
+      estilo: {
+        lineaColor: String(estado.lineColor).toLowerCase(), lineaOpacidad: estado.lineOpacity, lineaGrosor: estado.lineWeight * k,
+        dash: (DASH[estado.lineEstilo] || []).map(v => v * k),
+        conBorde: estado.conBorde, colorBorde: String(estado.colorBorde).toLowerCase(), bw: 2 * k,
+        textoPx: estado.tamanoTexto * k, textoColor: '#211f1b', vertical: document.body.classList.contains('nombres-vertical'),
+      },
+    };
+  }
+
+  // ---- Exportador canvas (PNG, JPG y vista previa) ----
+  const FUENTE_NOMBRES = '"Roboto Condensed", sans-serif';
+  const pathsUnit = {};
+  Object.keys(FORMAS_UNIT).forEach(n => { pathsUnit[n] = new Path2D(dForma(n, 0, 0, 1, 4)); });
+  // f = factor de escala del dibujo (1 = tamaño real; menos para la vista previa)
+  function pintarCanvas(ctx, E, f){
+    const st = E.estilo;
+    ctx.save();
+    ctx.setTransform(f, 0, 0, f, 0, 0);
+    ctx.clearRect(0, 0, E.W, E.H);
+    if (E.fondo) { ctx.fillStyle = E.fondo; ctx.fillRect(0, 0, E.W, E.H); }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    E.copias.forEach(cp => {
+      if (cp.lineas.length) {
+        ctx.save();
+        ctx.strokeStyle = st.lineaColor; ctx.globalAlpha = st.lineaOpacidad; ctx.lineWidth = st.lineaGrosor; ctx.setLineDash(st.dash);
+        cp.lineas.forEach(l => { ctx.beginPath(); ctx.moveTo(l[0][0], l[0][1]); for (let i = 1; i < l.length; i++) ctx.lineTo(l[i][0], l[i][1]); ctx.stroke(); });
+        ctx.restore();
+      }
+      cp.puntos.forEach(p => {
+        const path = pathsUnit[p.forma] || pathsUnit.circulo;
+        ctx.save(); ctx.translate(p.x, p.y);
+        if (st.conBorde) {
+          ctx.save(); ctx.scale(p.s, p.s); ctx.fillStyle = st.colorBorde; ctx.fill(path); ctx.restore();
+          const s2 = Math.max(0.5, p.s - 2 * st.bw); ctx.scale(s2, s2);
+        } else ctx.scale(p.s, p.s);
+        ctx.fillStyle = p.c; ctx.fill(path);
+        ctx.restore();
+      });
+      if (cp.textos.length) {
+        ctx.fillStyle = st.textoColor; ctx.font = '500 ' + st.textoPx + 'px ' + FUENTE_NOMBRES; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        cp.textos.forEach(t => {
+          ctx.save();
+          if (st.vertical) { ctx.translate(t.x, t.y - t.s / 2 - st.textoPx * 0.1); ctx.rotate(-Math.PI / 2); }
+          else ctx.translate(t.x + t.s / 2 + st.textoPx * 0.5, t.y);
+          ctx.fillText(t.txt, 0, 0.35 * st.textoPx);
+          ctx.restore();
+        });
+      }
+    });
+    ctx.restore();
+  }
+
+  // ---- Exportador SVG ----
+  function xmlEsc(s){ return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function escenaASvg(E){
+    const st = E.estilo, n2 = v => redondear(v, 2);
+    const o = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + E.W + '" height="' + E.H + '" viewBox="0 0 ' + E.W + ' ' + E.H + '">'];
+    if (E.fondo) o.push('<rect id="fondo" width="' + E.W + '" height="' + E.H + '" fill="' + E.fondo + '"/>');
+    E.copias.forEach((cp, idx) => {
+      o.push('<g id="copia-' + (idx + 1) + '" data-inclinacion="' + n2(cp.pitch) + '" data-rotacion="' + n2(cp.bearing) + '">');
+      if (cp.lineas.length) {
+        o.push('<g fill="none" stroke="' + st.lineaColor + '" stroke-opacity="' + st.lineaOpacidad + '" stroke-width="' + n2(st.lineaGrosor) + '" stroke-linecap="round" stroke-linejoin="round"' +
+               (st.dash.length ? ' stroke-dasharray="' + st.dash.map(n2).join(' ') + '"' : '') + '>');
+        cp.lineas.forEach(l => o.push('<polyline points="' + l.map(v => n2(v[0]) + ',' + n2(v[1])).join(' ') + '"/>'));
+        o.push('</g>');
+      }
+      cp.puntos.forEach(p => {
+        if (st.conBorde) {
+          o.push('<path d="' + dForma(p.forma, p.x, p.y, p.s) + '" fill="' + st.colorBorde + '"/>');
+          o.push('<path d="' + dForma(p.forma, p.x, p.y, Math.max(0.5, p.s - 2 * st.bw)) + '" fill="' + p.c + '"/>');
+        } else o.push('<path d="' + dForma(p.forma, p.x, p.y, p.s) + '" fill="' + p.c + '"/>');
+      });
+      if (cp.textos.length) {
+        o.push('<g font-family="' + xmlEsc(FUENTE_NOMBRES.replace(/"/g, '')) + '" font-weight="500" font-size="' + n2(st.textoPx) + '" fill="' + st.textoColor + '">');
+        cp.textos.forEach(t => {
+          const dy = n2(0.35 * st.textoPx);
+          if (st.vertical) o.push('<text transform="translate(' + n2(t.x) + ' ' + n2(t.y - t.s / 2 - st.textoPx * 0.1) + ') rotate(-90)" dy="' + dy + '">' + xmlEsc(t.txt) + '</text>');
+          else o.push('<text x="' + n2(t.x + t.s / 2 + st.textoPx * 0.5) + '" y="' + n2(t.y) + '" dy="' + dy + '">' + xmlEsc(t.txt) + '</text>');
+        });
+        o.push('</g>');
+      }
+      o.push('</g>');
+    });
+    o.push('</svg>');
+    return o.join('\n');
+  }
+
+  // ---- Controles del patrón ----
+  const $pt = id => document.getElementById(id);
+  let patronAbierto = false, patronTimer = null, fuentePromesa = null;
+  const msgPatron = $pt('msgPatron');
+  const MSG_PATRON = msgPatron.textContent;
+
+  function asegurarFuente(){
+    if (!fuentePromesa) fuentePromesa = (document.fonts && document.fonts.load) ? document.fonts.load('500 20px "Roboto Condensed"').catch(() => {}) : Promise.resolve();
+    return fuentePromesa;
+  }
+  function etiquetasPatron(){
+    $pt('valPatronTamano').textContent = $pt('sliderPatronTamano').value + ' px';
+    $pt('valPatronSeparacion').textContent = parseFloat($pt('sliderPatronSeparacion').value).toFixed(2) + '×';
+    $pt('valPatronPitchMin').textContent = $pt('sliderPatronPitchMin').value + '°';
+    $pt('valPatronPitchMax').textContent = $pt('sliderPatronPitchMax').value + '°';
+    $pt('valPatronRotMin').textContent = $pt('sliderPatronRotMin').value + '°';
+    $pt('valPatronRotMax').textContent = $pt('sliderPatronRotMax').value + '°';
+    $pt('selectPatronOrientacion').style.display = $pt('selectPatronDistribucion').value === 'ladrillo' ? 'block' : 'none';
+  }
+  ['sliderPatronTamano', 'sliderPatronSeparacion', 'sliderPatronPitchMin', 'sliderPatronPitchMax', 'sliderPatronRotMin', 'sliderPatronRotMax',
+   'selectPatronDistribucion'].forEach(id => $pt(id).addEventListener('input', etiquetasPatron));
+  $pt('selectPatronDistribucion').addEventListener('change', etiquetasPatron);
+  ['togglePatronPuntos', 'togglePatronConexiones', 'togglePatronNombres'].forEach(id => $pt(id).addEventListener('click', function(){ this.classList.toggle('on'); }));
+  $pt('btnPatronSemilla').addEventListener('click', function(){ $pt('inputPatronSemilla').value = nuevaSemilla(); programarPatron(0); });
+  etiquetasPatron();
+
+  async function renderizarVistaPatron(){
+    const c = leerPatron();
+    const cv = $pt('patronCanvas');
+    if (c.nombres) await asegurarFuente();
+    const E = generarEscena(c);
+    if (E.error) { msgPatron.textContent = E.error; cv.style.display = 'none'; return; }
+    const f = Math.min(1, 1600 / Math.max(c.W, c.H));
+    cv.width = Math.max(1, Math.round(c.W * f)); cv.height = Math.max(1, Math.round(c.H * f));
+    cv.style.display = 'block';
+    cv.classList.toggle('transparente', !E.fondo);
+    pintarCanvas(cv.getContext('2d'), E, f);
+    msgPatron.textContent = E.copias.length + ' copias · ' + c.W + ' × ' + c.H + ' px · semilla ' + c.semilla;
+  }
+  function programarPatron(ms){
+    if (!patronAbierto) return;
+    clearTimeout(patronTimer);
+    patronTimer = setTimeout(renderizarVistaPatron, ms === undefined ? 150 : ms);
+  }
+  function abrirVistaPatron(){
+    patronAbierto = true;
+    document.body.classList.add('patron-abierto');
+    $pt('btnPatronVista').textContent = 'Ocultar patrón';
+    renderizarVistaPatron();
+  }
+  function cerrarVistaPatron(){
+    patronAbierto = false;
+    clearTimeout(patronTimer);
+    document.body.classList.remove('patron-abierto');
+    $pt('btnPatronVista').textContent = 'Ver patrón';
+    msgPatron.textContent = MSG_PATRON;
+  }
+  $pt('btnPatronVista').addEventListener('click', function(){ if (patronAbierto) cerrarVistaPatron(); else abrirVistaPatron(); });
+  $pt('patronCerrar').addEventListener('click', cerrarVistaPatron);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && patronAbierto) cerrarVistaPatron(); });
+  // cualquier cambio en el panel (incluidos color, forma, conexiones o nombres) actualiza la vista previa
+  ['input', 'change', 'click'].forEach(t => $pt('panel').addEventListener(t, function(e){
+    if (!patronAbierto) return;
+    if (t === 'click' && !(e.target.closest && e.target.closest('.switch, button'))) return;
+    programarPatron();
+  }));
+
+  // ---- Exportar ----
+  function nombreArchivoPatron(c, ext){
+    const sem = c.semilla.replace(/[^A-Za-z0-9_-]/g, '') || 'x';
+    return 'patron-' + sem + '-' + c.distribucion + '-' + c.W + 'x' + c.H + '.' + ext;
+  }
+  function descargarBlob(blob, nombre){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  async function exportarPatron(formato){
+    const c = leerPatron();
+    if (formato !== 'svg' && (Math.max(c.W, c.H) > 16000 || c.W * c.H > 150000000)) {
+      msgPatron.textContent = 'Ese tamaño es demasiado grande para una imagen en el navegador. Usá SVG o bajá el ancho y el alto.';
+      return;
+    }
+    msgPatron.textContent = 'Generando ' + formato.toUpperCase() + '…';
+    if (c.nombres) await asegurarFuente();
+    await new Promise(r => setTimeout(r, 30));               // deja pintar el aviso antes del trabajo pesado
+    const E = generarEscena(c);
+    if (E.error) { msgPatron.textContent = E.error; return; }
+    let blob;
+    if (formato === 'svg') {
+      blob = new Blob([escenaASvg(E)], { type: 'image/svg+xml' });
+    } else {
+      if (formato === 'jpg' && !E.fondo) E.fondo = String(estado.colorFondo).toLowerCase();   // el JPG no tiene transparencia
+      const cv = document.createElement('canvas');
+      cv.width = c.W; cv.height = c.H;
+      pintarCanvas(cv.getContext('2d'), E, 1);
+      blob = await new Promise(res => cv.toBlob(res, formato === 'png' ? 'image/png' : 'image/jpeg', 0.95));
+      if (!blob) { msgPatron.textContent = 'El navegador no pudo crear una imagen tan grande. Probá con un tamaño menor o con SVG.'; return; }
+    }
+    const nombre = nombreArchivoPatron(c, formato);
+    descargarBlob(blob, nombre);
+    msgPatron.textContent = 'Listo: se descargó ' + nombre + ' (' + E.copias.length + ' copias).';
+  }
+  $pt('btnPatronPNG').addEventListener('click', () => exportarPatron('png'));
+  $pt('btnPatronJPG').addEventListener('click', () => exportarPatron('jpg'));
+  $pt('btnPatronSVG').addEventListener('click', () => exportarPatron('svg'));
+
   // ---- AJUSTES PREESTABLECIDOS ----
   // Cada preset es completo: parte de "estandar" y cambia solo lo que lo distingue, así el resultado no
   // depende de cómo estaba el panel antes. Se aplican moviendo los mismos controles del panel, de modo que
@@ -1853,7 +2385,7 @@
   function marcarPersonalizado(e){
     if (aplicandoPreset) return;
     const el = e.target && e.target.closest ? e.target.closest('input, select, .switch, button') : null;
-    if (!el || NO_SON_AJUSTES.includes(el.id)) return;
+    if (!el || NO_SON_AJUSTES.includes(el.id) || el.closest('#grupoPatron')) return;
     const esCampo = el.matches('input, select');
     if (e.type === 'click' && esCampo) return;      // abrir un selector o tocar un slider no cambia nada todavía
     if (e.type !== 'click' && !esCampo) return;     // los interruptores y botones cuentan por su clic
